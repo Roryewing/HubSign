@@ -6,10 +6,23 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
       - run: uv sync
       - run: uv run ruff check .
       - run: uv run ruff format --check .
-      - run: uv run pytest -q
+      - name: Tests on SQLite
+        run: uv run pytest -q
+      - name: Tests on PostgreSQL
+        run: uv run pytest -q
+        env:
+          HUBSIGN_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres

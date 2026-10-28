@@ -99,7 +99,9 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const lsGet=(k,d)=>{try{return localStorage.getItem(k)??d}catch{return d}};
 const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch{}};
-const state={me:null,mode:lsGet("hs_mode","test"),composer:null};
+const state={me:null,mode:lsGet("hs_mode","test"),org:lsGet("hs_org",""),composer:null};
+const AUTHM={none:"Link only",access_code:"Access code",sms:"SMS code",email:"Email code"};
+const can=l=>({viewer:1,sender:2,admin:3,owner:4}[state.me?.role]||0)>=({viewer:1,sender:2,admin:3,owner:4}[l]);
 const COLORS=["#ffd966","#9fd8ff","#b7f0b1","#ffb3c7","#d4b8ff","#ffc999"];
 const SIZE={signature:[.25,.06],initials:[.08,.05],date:[.15,.03],name:[.22,.03],email:[.28,.03],text:[.25,.03],checkbox:[.025,.02]};
 const TYPES={signature:"Signature",initials:"Initial",date:"Date Signed",name:"Name",email:"Email",text:"Text",checkbox:"Checkbox"};
@@ -113,7 +115,7 @@ const ICON={send:'<svg width="26" height="26" viewBox="0 0 24 24" fill="none" st
 const MARK=(bg,fg)=>`<svg width="28" height="28" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="${bg}"/><path d="M8 21c4-9 6-9 6-3s3 3 10-5" stroke="${fg}" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>`;
 
 async function api(path,opt={}){
-  const o={credentials:"same-origin",...opt,headers:{"X-HubSign-Mode":state.mode,...(opt.body?{"Content-Type":"application/json"}:{}),...(opt.headers||{})}};
+  const o={credentials:"same-origin",...opt,headers:{"X-HubSign-Mode":state.mode,...(state.org?{"X-HubSign-Org":state.org}:{}),...(opt.body?{"Content-Type":"application/json"}:{}),...(opt.headers||{})}};
   if(opt.body&&typeof opt.body!=="string")o.body=JSON.stringify(opt.body);
   const r=await fetch(path,o);
   if(r.status===204)return null;
@@ -134,29 +136,30 @@ function shell(active,inner){
   return `<header class="top"><a class="logo" href="#home">${MARK("#4b2bd6","#ffd23f")}<span>HubSign</span></a>
   ${nav.map(([k,l])=>`<a class="nl ${active===k?"on":""}" href="#${k}">${l}</a>`).join("")}<span class="sp"></span>
   <span class="seg" title="Sandbox documents are watermarked and not legally binding"><button data-mode="test" class="${state.mode==="test"?"on":""}">Sandbox</button><button data-mode="live" class="${state.mode==="live"?"on":""}">Live</button></span>
-  <span class="menuwrap"><button class="btn primary" id="startbtn">Start ▾</button><div class="menu" id="startmenu" hidden><a href="#new">${ICON.send.replace('width="26" height="26"','width="18" height="18"')} Send an Envelope</a><a href="#templates">${ICON.tpl.replace('width="26" height="26"','width="18" height="18"')} Use a Template</a><a href="#new/template">${ICON.tpl.replace('width="26" height="26"','width="18" height="18"')} Create a Template</a></div></span>
-  <span class="menuwrap" style="margin-left:12px"><button class="avatar" id="avbtn" aria-label="Account">${esc(ini)}</button><div class="menu" id="avmenu" hidden><div class="who"><b>${esc(state.me.name)}</b><br>${esc(state.me.email)}</div><a href="#developer">API keys &amp; webhooks</a><button id="logout">Sign out</button></div></span></header>
+  ${can("sender")?`<span class="menuwrap"><button class="btn primary" id="startbtn">Start ▾</button><div class="menu" id="startmenu" hidden><a href="#new">${ICON.send.replace('width="26" height="26"','width="18" height="18"')} Send an Envelope</a><a href="#templates">${ICON.tpl.replace('width="26" height="26"','width="18" height="18"')} Use a Template</a><a href="#new/template">${ICON.tpl.replace('width="26" height="26"','width="18" height="18"')} Create a Template</a></div></span>`:""}
+  <span class="menuwrap" style="margin-left:12px"><button class="avatar" id="avbtn" aria-label="Account">${esc(ini)}</button><div class="menu" id="avmenu" hidden><div class="who"><b>${esc(state.me.name)}</b><br>${esc(state.me.email)}<br><span class="pill">${esc(state.me.role)}</span></div>${state.me.orgs.map(o=>`<button data-org="${esc(o.id)}">${o.id===state.me.org?"✓ ":"&nbsp;&nbsp;&nbsp;"}${esc(o.name)}</button>`).join("")}<a href="#team">Team &amp; organisations</a><a href="#developer">API keys &amp; webhooks</a><button id="logout">Sign out</button></div></span></header>
   ${state.mode==="test"?`<div class="banner">Sandbox: documents are watermarked and are not legally binding. Signing links are returned to you here and in the API.</div>`:""}
   <main><div id="flash"></div>${inner}</main>`;
 }
 function bindShell(){
   document.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{state.mode=b.dataset.mode;lsSet("hs_mode",state.mode);state.composer=null;route()});
   const toggle=(btn,menu)=>{$(btn).onclick=e=>{e.stopPropagation();const m=$(menu),show=m.hidden;document.querySelectorAll(".menu").forEach(x=>x.hidden=true);m.hidden=!show}};
-  toggle("#startbtn","#startmenu");toggle("#avbtn","#avmenu");
+  if($("#startbtn"))toggle("#startbtn","#startmenu");toggle("#avbtn","#avmenu");
+  document.querySelectorAll("[data-org]").forEach(b=>b.onclick=()=>{state.org=b.dataset.org;lsSet("hs_org",state.org);state.me=null;state.composer=null;route()});
   document.onclick=()=>document.querySelectorAll(".menu").forEach(x=>x.hidden=true);
   $("#logout").onclick=async e=>{e.preventDefault();await api("/auth/logout",{method:"POST"}).catch(()=>{});state.me=null;route()};
 }
 
 /* ---------- auth ---------- */
-function authView(signup){
+function authView(signup,invite){
   $("#app").innerHTML=`<div class="auth"><a class="logo" style="margin:0 0 6px">${MARK("#4b2bd6","#ffd23f")}HubSign</a>
-  <p class="sub">${signup?"Create your account to start sending agreements":"Log in to send and sign agreements"}</p><div class="card" style="margin-top:18px"><form id="af" class="row" style="flex-direction:column;align-items:stretch;gap:14px">
-  ${signup?`<label class="f">Full name<input name="name" autocomplete="name"></label>`:""}
+  <p class="sub">${invite?"You were invited to a team. Create your account with the email the invitation was sent to.":signup?"Create your account to start sending agreements":"Log in to send and sign agreements"}</p><div class="card" style="margin-top:18px"><form id="af" class="row" style="flex-direction:column;align-items:stretch;gap:14px">
+  ${signup?`<label class="f">Full name<input name="name" autocomplete="name"></label>`:""}${invite?`<input type="hidden" name="invite_token" value="${esc(invite)}">`:""}
   <label class="f">Email<input name="email" type="email" required autocomplete="username"></label>
   <label class="f">Password${signup?" (8+ characters)":""}<input name="password" type="password" required minlength="8" autocomplete="${signup?"new-password":"current-password"}"></label>
   <div id="flash"></div><button class="btn primary" style="justify-content:center;padding:11px">${signup?"Create account":"Log in"}</button></form></div>
   <p class="sub" style="text-align:center;margin-top:16px">${signup?"Already have an account?":"New to HubSign?"} <a href="#" id="swap">${signup?"Log in":"Create an account"}</a></p></div>`;
-  $("#swap").onclick=e=>{e.preventDefault();authView(!signup)};
+  $("#swap").onclick=e=>{e.preventDefault();authView(!signup,invite)};
   $("#af").onsubmit=async e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
     try{await api(signup?"/auth/signup":"/auth/login",{method:"POST",body:f});state.me=await api("/auth/me");location.hash="#home";route()}catch(x){flash(x.message,true)}};
 }
@@ -202,7 +205,7 @@ async function agreementsView(filter=""){
 /* ---------- envelope detail ---------- */
 async function detailView(id){
   const [e,ev]=await Promise.all([api("/v1/envelopes/"+id),api(`/v1/envelopes/${id}/events`)]);
-  const q=`?mode=${state.mode}`,fcount=r=>e.fields.filter(f=>f.recipient_id===r.id).length;
+  const q=`?mode=${state.mode}&org=${encodeURIComponent(state.org||"")}`,fcount=r=>e.fields.filter(f=>f.recipient_id===r.id).length;
   const rs=e.recipients.filter(r=>r.role==="signer"),viewed=rs.some(r=>["viewed","signed"].includes(r.status)),signed=rs.filter(r=>r.status==="signed").length;
   const bad=["declined","voided"].includes(e.status);
   const steps=[["Created","ok"],["Sent",e.status==="draft"?"":"ok"],["Viewed",viewed?"ok":""],["Signed",signed===rs.length&&rs.length?"ok":signed?"on":""],["Completed",e.status==="completed"?"ok":bad?"bad":""]];
@@ -210,9 +213,9 @@ async function detailView(id){
   <div class="row">${e.status==="draft"?`<button class="btn primary" id="send">Send</button><button class="btn danger" id="del">Delete draft</button>`:""}${e.status==="sent"?`<button class="btn danger" id="void">Void</button>`:""}
   <a class="btn" href="/v1/envelopes/${id}/document${q}">Original PDF</a>${e.status==="completed"?`<a class="btn primary" href="/v1/envelopes/${id}/signed${q}">Download signed PDF + certificate</a>`:""}</div></div>
   <div class="card"><div class="track">${steps.map(([l,c],i)=>`${i?`<span class="bar ${c==="ok"||c==="on"?"on":""}"></span>`:""}<div class="s ${c}"><i>${c==="ok"?"✓":c==="bad"?"✕":i+1}</i>${bad&&i===4?esc(LABEL[e.status]):l}</div>`).join("")}</div></div>
-  <div class="grid2" style="margin-top:16px;align-items:start"><div><div class="card"><h3>Recipients</h3><div class="scroll"><table><tbody>${e.recipients.map(r=>`<tr><td><b>${esc(r.name)}</b><div class="sub">${esc(r.email)}</div></td><td class="sub">${r.role==="cc"?"Gets a copy":"Needs to sign"} · step ${r.routing_order}${r.role==="signer"?` · ${fcount(r)} fields`:""}</td><td>${pill(r.status,r.status==="created"?"waiting":r.status)}${r.signing_url?`<div style="margin-top:6px"><a href="${esc(r.signing_url)}" target="_blank" rel="noopener">Open</a> · <a class="copy" href="#" data-url="${esc(r.signing_url)}">Copy link</a></div>`:""}</td></tr>`).join("")}</tbody></table></div>
+  <div class="grid2" style="margin-top:16px;align-items:start"><div><div class="card"><h3>Recipients</h3><div class="scroll"><table><tbody>${e.recipients.map(r=>`<tr><td><b>${esc(r.name)}</b><div class="sub">${esc(r.email)}</div></td><td class="sub">${r.role==="cc"?"Gets a copy":"Needs to sign"} · step ${r.routing_order}${r.role==="signer"?` · ${fcount(r)} fields`:""}${r.authentication.method!=="none"?`<div>${esc(AUTHM[r.authentication.method])}${r.authentication.phone?" "+esc(r.authentication.phone):""}${r.authentication.verified_at?" · verified":""}</div>`:""}</td><td>${pill(r.status,r.status==="created"?"waiting":r.status)}${r.signing_url?`<div style="margin-top:6px"><a href="${esc(r.signing_url)}" target="_blank" rel="noopener">Open</a> · <a class="copy" href="#" data-url="${esc(r.signing_url)}">Copy link</a></div>`:""}</td></tr>`).join("")}</tbody></table></div>
   <p class="sub" style="margin-top:10px">${e.sequential?"Signers sign in order.":"All signers can sign at once."} Signing links appear when it is a signer's turn.</p></div>
-  <div class="card"><h3>Details</h3><p style="margin:8px 0 2px"><b>${esc(e.document.name)}</b> · ${e.document.pages} pages</p><p class="mono sub" style="word-break:break-all">SHA-256 ${esc(e.document.sha256)}</p>${e.final_sha256?`<p class="mono sub" style="word-break:break-all">Signed copy ${esc(e.final_sha256)}</p>`:""}${e.message?`<p style="white-space:pre-wrap">${esc(e.message)}</p>`:""}
+  <div class="card"><h3>Details</h3><p style="margin:8px 0 2px"><b>${esc(e.document.name)}</b> · ${e.document.pages} pages</p><p class="mono sub" style="word-break:break-all">SHA-256 ${esc(e.document.sha256)}</p>${e.final_sha256?`<p><span class="pill completed">Cryptographically sealed</span> <a href="/verify" target="_blank">Verify a copy</a></p><p class="mono sub" style="word-break:break-all">Signed copy ${esc(e.final_sha256)}</p>`:""}${e.message?`<p style="white-space:pre-wrap">${esc(e.message)}</p>`:""}
   ${Object.keys(e.metadata).length?`<h3 style="margin-top:12px">Metadata</h3><pre>${esc(JSON.stringify(e.metadata,null,2))}</pre>`:""}</div>
   <div class="card"><h3 style="margin-bottom:6px">History</h3><ul class="tl">${ev.events.slice().reverse().map(x=>`<li><time>${esc(when(x.ts))}</time><div><b>${esc(x.type.replace("_"," "))}</b> <span class="sub">${esc(x.actor)}${x.ip?" · "+esc(x.ip):""}</span>${x.detail?`<div class="sub">${esc(x.detail)}</div>`:""}</div></li>`).join("")}</ul></div></div>
   <div class="card"><h3 style="margin-bottom:10px">Document</h3><div class="pdfwrap" id="pdf"><span class="sub">Rendering…</span></div></div></div>`);
@@ -244,17 +247,74 @@ const b64=buf=>{let s="";const a=new Uint8Array(buf);for(let i=0;i<a.length;i+=0
 async function templatesView(){
   const {templates}=await api("/v1/templates");
   $("#app").innerHTML=shell("templates",`<div class="head"><div><h1>Templates</h1><p class="sub">Reusable documents with recipient roles and fields already placed</p></div><a class="btn primary" href="#new/template">Create a Template</a></div><div id="flash"></div>
-  <div class="card scroll" style="padding:0">${templates.length?`<table><thead><tr><th>Name</th><th>Roles</th><th>Pages</th><th>Created</th><th></th></tr></thead><tbody>${templates.map(t=>`<tr><td><b>${esc(t.name)}</b><div class="sub">${esc(t.description)||esc(t.doc_name)}</div></td><td>${t.roles.map(r=>esc(r.name)).join(", ")}</td><td>${t.pages}</td><td>${esc(ago(t.created_at))}</td><td style="text-align:right;white-space:nowrap"><button class="btn sm primary" data-use="${esc(t.id)}">Use</button> <button class="btn sm danger" data-del="${esc(t.id)}">Delete</button></td></tr>`).join("")}</tbody></table>`:`<div class="empty"><h2>No templates yet</h2><p>Create one from a document you send often.</p><a class="btn primary" href="#new/template">Create a Template</a></div>`}</div><div id="modal"></div>`);
+  <div class="card scroll" style="padding:0">${templates.length?`<table><thead><tr><th>Name</th><th>Roles</th><th>Pages</th><th>Created</th><th></th></tr></thead><tbody>${templates.map(t=>`<tr><td><b>${esc(t.name)}</b><div class="sub">${esc(t.description)||esc(t.doc_name)}</div></td><td>${t.roles.map(r=>esc(r.name)).join(", ")}</td><td>${t.pages}</td><td>${esc(ago(t.created_at))}</td><td style="text-align:right;white-space:nowrap"><button class="btn sm primary" data-use="${esc(t.id)}">Use</button> <button class="btn sm" data-bulk="${esc(t.id)}">Bulk send</button> <button class="btn sm danger" data-del="${esc(t.id)}">Delete</button></td></tr>`).join("")}</tbody></table>`:`<div class="empty"><h2>No templates yet</h2><p>Create one from a document you send often.</p><a class="btn primary" href="#new/template">Create a Template</a></div>`}</div><div id="modal"></div>`);
   bindShell();
   document.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{if(b.dataset.sure!=="1"){b.dataset.sure="1";b.textContent="Confirm";return}await api("/v1/templates/"+b.dataset.del,{method:"DELETE"});templatesView()});
+  document.querySelectorAll("[data-bulk]").forEach(b=>b.onclick=()=>bulkModal(templates.find(x=>x.id===b.dataset.bulk)));
   document.querySelectorAll("[data-use]").forEach(b=>b.onclick=()=>{const t=templates.find(x=>x.id===b.dataset.use);
     $("#modal").innerHTML=`<div class="modalbg"><div class="box"><h2>Use “${esc(t.name)}”</h2><p class="sub">Add the people for each role.</p><form id="uf" class="row" style="flex-direction:column;align-items:stretch;gap:12px;margin-top:12px">
-    ${t.roles.map((r,i)=>`<div class="grid2"><label class="f"><span><span class="dot" style="background:${COLORS[i%6]}"></span>${esc(r.name)} name</span><input name="n${i}" required maxlength="100"></label><label class="f">Email<input name="e${i}" type="email" required></label></div>`).join("")}
+    ${t.roles.map((r,i)=>{const m=(r.authentication||{}).method||"none";return `<div class="grid2"><label class="f"><span><span class="dot" style="background:${COLORS[i%6]}"></span>${esc(r.name)} name</span><input name="n${i}" required maxlength="100"></label><label class="f">Email<input name="e${i}" type="email" required></label>${m==="sms"?`<label class="f">Mobile number for the SMS code<input name="p${i}" required placeholder="+14165550123" maxlength="20"></label>`:""}${m==="access_code"?`<label class="f">Access code (share it with them yourself)<input name="a${i}" required minlength="4" maxlength="64"></label>`:""}</div>`}).join("")}
     <label class="f">Subject<input name="subject" value="${esc(t.name)}" maxlength="200"></label><label class="f">Message<textarea name="message" rows="2" maxlength="2000"></textarea></label>
     <div id="uerr"></div><div class="row" style="justify-content:flex-end"><button type="button" class="btn" id="ucx">Cancel</button><button class="btn" name="mode" value="draft">Save as draft</button><button class="btn primary" name="mode" value="send">Send</button></div></form></div></div>`;
     $("#ucx").onclick=()=>$("#modal").innerHTML="";
     $("#uf").onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target),send=(e.submitter?.value||"send")==="send";
-      try{const r=await api(`/v1/templates/${t.id}/envelopes`,{method:"POST",body:{recipients:t.roles.map((_,i)=>({name:fd.get("n"+i),email:fd.get("e"+i)})),subject:fd.get("subject"),message:fd.get("message"),send}});location.hash="#env/"+r.id}catch(x){$("#uerr").innerHTML=`<div class="err">${esc(x.message)}</div>`}}});
+      try{const r=await api(`/v1/templates/${t.id}/envelopes`,{method:"POST",body:{recipients:t.roles.map((_,i)=>({name:fd.get("n"+i),email:fd.get("e"+i),phone:fd.get("p"+i)||null,access_code:fd.get("a"+i)||null})),subject:fd.get("subject"),message:fd.get("message"),send}});location.hash="#env/"+r.id}catch(x){$("#uerr").innerHTML=`<div class="err">${esc(x.message)}</div>`}}});
+}
+
+function parseCsv(text){
+  const rows=[];for(const line of text.split(/\r?\n/)){if(!line.trim())continue;const cells=[];let cur="",q=false;
+    for(let i=0;i<line.length;i++){const ch=line[i];if(q){if(ch==='"'&&line[i+1]==='"'){cur+='"';i++}else if(ch==='"')q=false;else cur+=ch}else if(ch==='"')q=true;else if(ch===","){cells.push(cur.trim());cur=""}else cur+=ch}
+    cells.push(cur.trim());rows.push(cells)}
+  return rows;
+}
+function bulkModal(t){
+  const cols=t.roles.flatMap(r=>{const m=(r.authentication||{}).method;return [`${r.name} name`,`${r.name} email`,...(m==="sms"?[`${r.name} phone`]:[])]});
+  const hasCode=t.roles.some(r=>(r.authentication||{}).method==="access_code");
+  $("#modal").innerHTML=`<div class="modalbg"><div class="box"><h2>Bulk send “${esc(t.name)}”</h2><p class="sub">Paste one row per envelope. Columns, in order:</p><pre>${esc(cols.join(","))}</pre>
+  ${hasCode?`<div class="err">This template uses access codes, which cannot be bulk sent. Change the role to SMS or email codes.</div>`:""}
+  <textarea id="csv" rows="8" class="mono" placeholder="Paste CSV here (a header row is fine)"></textarea>
+  <div class="grid2" style="margin-top:10px"><label class="f">Subject<input id="bsub" value="${esc(t.name)}" maxlength="200"></label><label class="row" style="gap:8px;align-items:end;padding-bottom:9px"><input type="checkbox" id="bsend" checked> Send immediately</label></div>
+  <div id="bres"></div><div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" id="bcx">Close</button><button class="btn primary" id="bgo" ${hasCode?"disabled":""}>Send batch</button></div></div></div>`;
+  $("#bcx").onclick=()=>$("#modal").innerHTML="";
+  $("#bgo").onclick=async()=>{
+    let rows=parseCsv($("#csv").value);if(rows.length&&!(rows[0][1]||"").includes("@"))rows=rows.slice(1);
+    const per=cols.length/t.roles.length;
+    if(!rows.length)return $("#bres").innerHTML='<div class="err">Paste at least one row</div>';
+    if(rows.some(r=>r.length<cols.length))return $("#bres").innerHTML=`<div class="err">Every row needs ${cols.length} columns</div>`;
+    const E=/^[^@\s]+@[^@\s]+\.[^@\s]+$/,P=/^\+[1-9]\d{7,14}$/,probs=[];
+    rows.forEach((r,i)=>{let k=0;t.roles.forEach(ro=>{const m=(ro.authentication||{}).method,n=r[k++],e=r[k++];if(!n)probs.push(`Row ${i+1}: ${ro.name} name is empty`);if(!E.test(e||""))probs.push(`Row ${i+1}: “${e||""}” is not a valid email`);if(m==="sms"){const ph=(r[k++]||"").replace(/\s/g,"");r[k-1]=ph;if(!P.test(ph))probs.push(`Row ${i+1}: phone must look like +14165550123`)}})});
+    if(rows.length>500)probs.push("A batch can have at most 500 rows");
+    if(probs.length)return $("#bres").innerHTML=`<div class="err">${probs.slice(0,8).map(esc).join("<br>")}${probs.length>8?`<br>and ${probs.length-8} more`:""}</div>`;
+    let k;const body=rows.map(r=>{k=0;return t.roles.map(ro=>{const m=(ro.authentication||{}).method,p={name:r[k++],email:r[k++],phone:null};if(m==="sms")p.phone=r[k++];return p})});
+    $("#bgo").disabled=true;
+    try{let b=await api(`/v1/templates/${t.id}/bulk`,{method:"POST",body:{rows:body,subject:$("#bsub").value,send:$("#bsend").checked}});
+      while(["queued","running"].includes(b.status)){$("#bres").innerHTML=`<div class="ok">Working… ${b.done+b.failed} of ${b.total}</div>`;await new Promise(r=>setTimeout(r,1000));b=await api("/v1/batches/"+b.id)}
+      $("#bres").innerHTML=`<div class="${b.failed?"err":"ok"}">${b.done} created${b.send?" and sent":""}, ${b.failed} failed.${b.errors.map(e=>`<div>Row ${e.row}: ${esc(e.error)}</div>`).join("")}</div><a href="#agreements">View agreements</a>`;
+    }catch(x){$("#bres").innerHTML=`<div class="err">${esc(x.message)}</div>`;$("#bgo").disabled=false}};
+}
+
+/* ---------- team ---------- */
+async function teamView(){
+  const o=await api("/v1/org"),admin=can("admin"),owner=can("owner");
+  $("#app").innerHTML=shell("team",`<div class="head"><div><h1>Team</h1><p class="sub">${esc(o.name)} · you are ${esc(o.role)}</p></div></div><div id="flash"></div>
+  ${admin?`<div class="card"><h3>Organisation name</h3><form id="rn" class="row" style="margin-top:8px"><input id="orgname" value="${esc(o.name)}" maxlength="100" style="max-width:360px"><button class="btn sm primary">Rename</button></form></div>`:""}
+  <div class="card scroll" style="padding:0"><table><thead><tr><th>Member</th><th>Role</th><th></th></tr></thead><tbody>${o.members.map(m=>`<tr><td><b>${esc(m.name)}</b><div class="sub">${esc(m.email)}</div></td><td>${admin&&(m.role!=="owner"||owner)?`<select data-role="${esc(m.id)}" style="max-width:150px">${["viewer","sender","admin",...(owner?["owner"]:[])].map(r=>`<option ${r===m.role?"selected":""}>${r}</option>`).join("")}</select>`:`<span class="pill">${esc(m.role)}</span>`}</td><td style="text-align:right">${admin||m.id===state.me.id?`<button class="btn sm danger" data-rm="${esc(m.id)}">${m.id===state.me.id?"Leave":"Remove"}</button>`:""}</td></tr>`).join("")}</tbody></table></div>
+  ${admin?`<div class="card"><h2>Invite someone</h2><p class="sub"><b>Viewer</b> reads agreements. <b>Sender</b> also sends and manages templates. <b>Admin</b> also manages API keys, webhooks and people.</p><form id="inv" class="row" style="margin-top:10px"><input name="email" type="email" required placeholder="name@company.com" style="max-width:300px"><select name="role" style="max-width:130px"><option>sender</option><option>viewer</option><option>admin</option></select><button class="btn primary">Send invitation</button></form><div id="invout"></div>
+  ${o.invites.length?`<h3 style="margin:16px 0 6px">Pending</h3><table><tbody>${o.invites.map(i=>`<tr><td>${esc(i.email)}</td><td>${esc(i.role)}</td><td class="sub">expires ${esc(when(i.expires_at))}</td><td style="text-align:right"><button class="btn sm danger" data-ci="${esc(i.id)}">Cancel</button></td></tr>`).join("")}</tbody></table>`:""}</div>`:""}
+  <div class="card"><h2>Another organisation</h2><p class="sub">Keep a separate workspace for another company or department.</p><form id="no" class="row" style="margin-top:8px"><input name="name" required maxlength="100" placeholder="Organisation name" style="max-width:300px"><button class="btn">Create</button></form></div>`);
+  bindShell();
+  const go=fn=>async e=>{e.preventDefault();try{await fn(e)}catch(x){flash(x.message,true)}};
+  if(admin){$("#rn").onsubmit=go(async()=>{await api("/v1/org",{method:"PATCH",body:{name:$("#orgname").value}});state.me=null;await route()});
+    $("#inv").onsubmit=go(async e=>{const fd=new FormData(e.target),r=await api("/v1/org/invites",{method:"POST",body:{email:fd.get("email"),role:fd.get("role")}});
+      $("#invout").innerHTML=`<div class="ok" style="word-break:break-all">Invitation sent to ${esc(r.email)}. If email isn't set up, send them this link yourself (shown once):<pre>${esc(r.accept_url)}</pre></div>`;e.target.reset()});
+    document.querySelectorAll("[data-ci]").forEach(b=>b.onclick=go(async()=>{await api("/v1/org/invites/"+b.dataset.ci,{method:"DELETE"});teamView()}))}
+  document.querySelectorAll("[data-role]").forEach(sel=>sel.onchange=go(async()=>{await api("/v1/org/members/"+sel.dataset.role,{method:"PATCH",body:{role:sel.value}});teamView()}));
+  document.querySelectorAll("[data-rm]").forEach(b=>b.onclick=go(async()=>{if(b.dataset.sure!=="1"){b.dataset.sure="1";b.textContent="Confirm";return}await api("/v1/org/members/"+b.dataset.rm,{method:"DELETE"});if(b.dataset.rm===state.me.id){state.org="";lsSet("hs_org","");}state.me=null;await route()}));
+  $("#no").onsubmit=go(async e=>{const r=await api("/v1/orgs",{method:"POST",body:{name:new FormData(e.target).get("name")}});state.org=r.id;lsSet("hs_org",r.id);state.me=null;location.hash="#home";await route()});
+}
+async function inviteView(token){
+  try{const r=await api("/v1/invites/accept",{method:"POST",body:{token}});state.org=r.org;lsSet("hs_org",r.org);state.me=null;location.hash="#team";await route()}
+  catch(x){$("#app").innerHTML=shell("home",`<div class="err">${esc(x.message)}</div>`);bindShell()}
 }
 
 /* ---------- composer (envelope + template) ---------- */
@@ -266,13 +326,13 @@ function composerView(kind){
   const body={
     1:()=>`<div class="grid2" style="align-items:start"><div><label class="drop" id="drop"><input type="file" id="file" accept="application/pdf,.pdf" hidden><b>${c.bytes?esc(c.name):"Drag a PDF here or click to browse"}</b>${c.bytes?`${c.pages} page${c.pages>1?"s":""} loaded. Click to replace.`:"Up to 10 MB, unencrypted PDFs only"}</label></div>
       <div class="card row" style="flex-direction:column;align-items:stretch;gap:12px">${tpl?`<label class="f">Template name<input id="tname" value="${esc(c.tplName)}" maxlength="120" placeholder="Equipment lease"></label><label class="f">Description<textarea id="tdesc" rows="3" maxlength="500">${esc(c.tplDesc)}</textarea></label>`:`<label class="f">Email subject<input id="subject" value="${esc(c.subject)}" maxlength="200" placeholder="Please sign: Equipment lease"></label><label class="f">Email message<textarea id="message" rows="4" maxlength="2000">${esc(c.message)}</textarea></label>`}</div></div>`,
-    2:()=>`<div class="card"><div class="scroll"><table><thead><tr><th>${tpl?"Role name":"Name"}</th>${tpl?"":"<th>Email</th>"}<th>Action</th><th>Order</th><th></th></tr></thead><tbody>${c.recipients.map((r,i)=>`<tr><td><span class="dot" style="background:${COLORS[i%6]}"></span><input style="width:calc(100% - 18px)" data-r="${i}" data-k="name" value="${esc(r.name)}" placeholder="${tpl?"Tenant":"Full name"}"></td>${tpl?"":`<td><input data-r="${i}" data-k="email" type="email" value="${esc(r.email)}" placeholder="name@company.com"></td>`}<td><select data-r="${i}" data-k="role"><option value="signer" ${r.role==="signer"?"selected":""}>Needs to sign</option><option value="cc" ${r.role==="cc"?"selected":""}>Receives a copy</option></select></td><td style="width:90px"><input data-r="${i}" data-k="routing_order" type="number" min="1" max="20" value="${r.routing_order}"></td><td>${c.recipients.length>1?`<button class="btn sm danger" data-rm="${i}">Remove</button>`:""}</td></tr>`).join("")}</tbody></table></div>
+    2:()=>`<div class="card"><div class="scroll"><table><thead><tr><th>${tpl?"Role name":"Name"}</th>${tpl?"":"<th>Email</th>"}<th>Action</th><th>Identity check</th><th>Order</th><th></th></tr></thead><tbody>${c.recipients.map((r,i)=>`<tr><td><span class="dot" style="background:${COLORS[i%6]}"></span><input style="width:calc(100% - 18px)" data-r="${i}" data-k="name" value="${esc(r.name)}" placeholder="${tpl?"Tenant":"Full name"}"></td>${tpl?"":`<td><input data-r="${i}" data-k="email" type="email" value="${esc(r.email)}" placeholder="name@company.com"></td>`}<td><select data-r="${i}" data-k="role"><option value="signer" ${r.role==="signer"?"selected":""}>Needs to sign</option><option value="cc" ${r.role==="cc"?"selected":""}>Receives a copy</option></select></td><td style="min-width:190px">${r.role==="signer"?`<select data-r="${i}" data-k="am"><option value="none" ${(r.am||"none")==="none"?"selected":""}>Link only</option><option value="access_code" ${r.am==="access_code"?"selected":""}>Access code</option><option value="sms" ${r.am==="sms"?"selected":""}>SMS code</option><option value="email" ${r.am==="email"?"selected":""}>Email code</option></select>${!tpl&&r.am==="access_code"?`<input data-r="${i}" data-k="ac" value="${esc(r.ac||"")}" placeholder="Code to share with them" maxlength="64" style="margin-top:4px">`:""}${!tpl&&r.am==="sms"?`<input data-r="${i}" data-k="ph" value="${esc(r.ph||"")}" placeholder="+14165550123" maxlength="20" style="margin-top:4px">`:""}`:""}</td><td style="width:90px"><input data-r="${i}" data-k="routing_order" type="number" min="1" max="20" value="${r.routing_order}"></td><td>${c.recipients.length>1?`<button class="btn sm danger" data-rm="${i}">Remove</button>`:""}</td></tr>`).join("")}</tbody></table></div>
       <div class="row" style="margin-top:12px;justify-content:space-between"><button class="btn sm" id="addr">+ Add recipient</button><label class="row" style="gap:8px"><input type="checkbox" id="seq" ${c.sequential?"checked":""}> Set signing order</label></div></div>`,
     3:()=>`<div class="editor"><aside class="pal"><h3>Recipient</h3>${signers().map(r=>`<div class="rchip ${c.tool.recipient===r.i?"on":""}" data-rc="${r.i}"><span class="dot" style="background:${COLORS[r.i%6]}"></span>${esc(r.name||"Recipient "+(r.i+1))}</div>`).join("")}
       <h3>Standard fields</h3>${Object.entries(TYPES).map(([k,l])=>`<button class="ptool ${c.tool.type===k?"on":""}" draggable="true" data-ft="${k}"><span>${GLYPH[k]}</span>${l}</button>`).join("")}<p class="sub" style="font-size:12.5px;margin-top:8px">Drag a field onto the page, or pick one and click. Click a placed field to remove it.</p></aside>
       <div class="pdfwrap" id="pdf"><span class="sub">Rendering…</span></div></div>`,
     4:()=>tpl?`<div class="card"><h2>${esc(c.tplName)}</h2><p class="sub">${esc(c.name)} · ${c.pages} pages · ${c.recipients.length} role${c.recipients.length>1?"s":""} · ${c.fields.length} fields</p><div id="flash"></div><button class="btn primary" id="savetpl">Save template</button></div>`:
-      `<div class="card"><h2>${esc(c.subject)}</h2><p class="sub">${esc(c.name)} · ${c.pages} pages · ${c.sequential?"signing in order":"all at once"}</p><table><tbody>${c.recipients.map((r,i)=>`<tr><td><span class="dot" style="background:${COLORS[i%6]}"></span><b>${esc(r.name)}</b> <span class="sub">${esc(r.email)}</span></td><td>${r.role==="signer"?"Needs to sign":"Receives a copy"} · step ${r.routing_order}</td><td>${r.role==="signer"?c.fields.filter(f=>f.recipient===i).map(f=>TYPES[f.type]).join(", ")||'<span style="color:var(--bad)">no fields</span>':""}</td></tr>`).join("")}</tbody></table>
+      `<div class="card"><h2>${esc(c.subject)}</h2><p class="sub">${esc(c.name)} · ${c.pages} pages · ${c.sequential?"signing in order":"all at once"}</p><table><tbody>${c.recipients.map((r,i)=>`<tr><td><span class="dot" style="background:${COLORS[i%6]}"></span><b>${esc(r.name)}</b> <span class="sub">${esc(r.email)}</span></td><td>${r.role==="signer"?"Needs to sign":"Receives a copy"} · step ${r.routing_order}${r.role==="signer"&&r.am&&r.am!=="none"?` · ${AUTHM[r.am]}`:""}</td><td>${r.role==="signer"?c.fields.filter(f=>f.recipient===i).map(f=>TYPES[f.type]).join(", ")||'<span style="color:var(--bad)">no fields</span>':""}</td></tr>`).join("")}</tbody></table>
       <div id="flash"></div><div class="row" style="margin-top:14px"><button class="btn" id="draft">Save as draft</button><button class="btn primary" id="sendnow">Send</button></div></div>`
   };
   $("#app").innerHTML=shell("new",`<div class="head"><div><h1>${tpl?"Create a Template":"Send an Envelope"}</h1><p class="sub">${state.mode==="test"?"Sandbox":"Live"} mode</p></div><button class="btn sm" id="reset">Start over</button></div>
@@ -293,11 +353,14 @@ function composerView(kind){
   }
   if(c.step===2){
     const sync=()=>document.querySelectorAll("[data-r]").forEach(i=>{const r=c.recipients[+i.dataset.r];r[i.dataset.k]=i.dataset.k==="routing_order"?Math.max(1,+i.value||1):i.value});
+    document.querySelectorAll('[data-k="am"],[data-k="role"]').forEach(x=>x.onchange=()=>{sync();composerView()});
     $("#addr").onclick=()=>{sync();c.recipients.push({name:"",email:"",role:"signer",routing_order:c.recipients.length+1});composerView()};
     document.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{sync();const i=+b.dataset.rm;c.recipients.splice(i,1);c.fields=c.fields.filter(f=>f.recipient!==i).map(f=>({...f,recipient:f.recipient>i?f.recipient-1:f.recipient}));composerView()});
     $("#next").onclick=()=>{sync();c.sequential=$("#seq").checked;
       if(c.recipients.some(r=>!r.name.trim()||(!tpl&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email))))return flash(tpl?"Every role needs a name":"Every recipient needs a name and a valid email",true);
       if(!c.recipients.some(r=>r.role==="signer"))return flash("Add at least one recipient who needs to sign",true);
+      if(!tpl){const bad=c.recipients.find(r=>r.role==="signer"&&((r.am==="access_code"&&(r.ac||"").length<4)||(r.am==="sms"&&!/^\+[1-9]\d{7,14}$/.test((r.ph||"").replace(/\s/g,"")))));
+        if(bad)return flash(bad.am==="sms"?`${bad.name} needs a phone number like +14165550123`:`${bad.name} needs an access code of at least 4 characters`,true)}
       c.fields=c.fields.filter(f=>c.recipients[f.recipient]?.role==="signer");c.tool.recipient=signers()[0].i;go(3)};
   }
   if(c.step===3){
@@ -316,8 +379,8 @@ function composerView(kind){
   }
   if(c.step===4){
     const common=()=>({document_base64:b64(c.bytes),document_name:c.name,fields:c.fields,sequential:c.sequential});
-    if(tpl)$("#savetpl").onclick=async()=>{try{await api("/v1/templates",{method:"POST",body:{...common(),name:c.tplName,description:c.tplDesc,roles:c.recipients.map(r=>({name:r.name.trim(),role:r.role,routing_order:r.routing_order}))}});state.composer=null;location.hash="#templates"}catch(x){flash(x.message,true)}};
-    else{const submit=async send=>{try{const r=await api("/v1/envelopes",{method:"POST",body:{...common(),subject:c.subject,message:c.message,recipients:c.recipients.map(r=>({...r,name:r.name.trim()})),send}});state.composer=null;location.hash="#env/"+r.id}catch(x){flash(x.message,true)}};
+    if(tpl)$("#savetpl").onclick=async()=>{try{await api("/v1/templates",{method:"POST",body:{...common(),name:c.tplName,description:c.tplDesc,roles:c.recipients.map(r=>({name:r.name.trim(),role:r.role,routing_order:r.routing_order,authentication:{method:r.role==="signer"?(r.am||"none"):"none"}}))}});state.composer=null;location.hash="#templates"}catch(x){flash(x.message,true)}};
+    else{const submit=async send=>{try{const r=await api("/v1/envelopes",{method:"POST",body:{...common(),subject:c.subject,message:c.message,recipients:c.recipients.map(r=>({name:r.name.trim(),email:r.email,role:r.role,routing_order:r.routing_order,authentication:{method:r.role==="signer"?(r.am||"none"):"none",access_code:r.am==="access_code"?r.ac:null,phone:r.am==="sms"?(r.ph||"").replace(/\s/g,""):null}})),send}});state.composer=null;location.hash="#env/"+r.id}catch(x){flash(x.message,true)}};
       $("#draft").onclick=()=>submit(false);$("#sendnow").onclick=()=>submit(true)}
   }
 }
@@ -333,8 +396,8 @@ async function developerView(tab="keys"){
 async function keysTab(){
   const {keys}=await api("/v1/api-keys");
   $("#dev").innerHTML=`<div class="card"><h2>Create a key</h2><p class="sub">Test keys (<span class="mono">hs_test_</span>) touch sandbox data. Live keys (<span class="mono">hs_live_</span>) touch live data. Keys are shown once.</p>
-  <form id="kf" class="row" style="margin-top:12px"><label class="f" style="flex:1;min-width:200px">Name<input name="name" required maxlength="60" placeholder="ServiceHub production"></label><label class="f">Mode<select name="mode"><option value="test">Test</option><option value="live">Live</option></select></label><button class="btn primary" style="align-self:flex-end">Create key</button></form><div id="newkey"></div><div id="flash"></div></div>
-  <div class="card scroll" style="padding:0">${keys.length?`<table><thead><tr><th>Name</th><th>Key</th><th>Mode</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody>${keys.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td class="mono">${esc(k.prefix)}…</td><td><span class="pill ${k.mode==="live"?"sent":"draft"}">${esc(k.mode)}</span></td><td>${esc(when(k.created_at))}</td><td>${k.last_used_at?esc(when(k.last_used_at)):"never"}</td><td><button class="btn sm danger" data-kid="${esc(k.id)}">Revoke</button></td></tr>`).join("")}</tbody></table>`:`<div class="empty">No keys yet.</div>`}</div>`;
+  <form id="kf" class="row" style="margin-top:12px"><label class="f" style="flex:1;min-width:200px">Name<input name="name" required maxlength="60" placeholder="ServiceHub production"></label><label class="f">Mode<select name="mode"><option value="test">Test</option><option value="live">Live</option></select></label><label class="f">Access<select name="role"><option value="sender">Send and read</option><option value="viewer">Read only</option><option value="admin">Also webhooks</option></select></label><button class="btn primary" style="align-self:flex-end">Create key</button></form><div id="newkey"></div><div id="flash"></div></div>
+  <div class="card scroll" style="padding:0">${keys.length?`<table><thead><tr><th>Name</th><th>Key</th><th>Mode</th><th>Access</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody>${keys.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td class="mono">${esc(k.prefix)}…</td><td><span class="pill ${k.mode==="live"?"sent":"draft"}">${esc(k.mode)}</span></td><td>${esc(k.role)}</td><td>${esc(when(k.created_at))}</td><td>${k.last_used_at?esc(when(k.last_used_at)):"never"}</td><td><button class="btn sm danger" data-kid="${esc(k.id)}">Revoke</button></td></tr>`).join("")}</tbody></table>`:`<div class="empty">No keys yet.</div>`}</div>`;
   $("#kf").onsubmit=async e=>{e.preventDefault();try{const k=await api("/v1/api-keys",{method:"POST",body:Object.fromEntries(new FormData(e.target))});
     $("#newkey").innerHTML=`<div class="ok" style="word-break:break-all">Copy your key now, it will not be shown again:<pre id="kv">${esc(k.key)}</pre><button class="btn sm" id="kc">Copy</button></div>`;$("#kc").onclick=async()=>{$("#kc").textContent=(await copyText(k.key))?"Copied":"Select the key and copy"};
     $("#kf").reset();setTimeout(()=>{},0)}catch(x){flash(x.message,true)}};
@@ -387,17 +450,28 @@ const mac = crypto.createHmac("sha256", secret).update(t + "." + rawBody).digest
 if (!crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(v1))) throw new Error("bad signature");</pre>
 <p class="sub">Failed deliveries (non-2xx or timeout) retry after 5 s, 1 min and 10 min. Every attempt is in the Deliveries log, and you can redeliver any event.</p>
 <h3 style="margin-top:14px">Events</h3><p class="mono">envelope.sent · envelope.completed · envelope.declined · envelope.voided · recipient.sent · recipient.viewed · recipient.signed · recipient.declined</p></div>
+<div class="card"><h2>Identity checks</h2><p class="sub">Add <span class="mono">authentication</span> to a recipient to require more than the link.</p>
+<pre>"recipients":[{"name":"Ann Lee","email":"ann@example.com",
+  "authentication":{"method":"sms","phone":"+14165550123"}}]      // or "access_code" with "access_code":"..." or "email"</pre>
+<p class="sub">Access codes are hashed and never shown again, so share them yourself. SMS and email send a six-digit code valid for 10 minutes. Five wrong attempts lock the recipient for 15 minutes. In the sandbox no message is sent and the code is always <span class="mono">000000</span>. The certificate of completion records the method and when it was verified.</p></div>
+<div class="card"><h2>Sealing and verification</h2><p class="sub">Every completed PDF carries a PAdES certification signature. Changing even one byte breaks it, and Adobe Acrobat will say so. Anyone can check a file, no account needed:</p>
+<pre>curl -s ${esc(base)}/v1/verify -H "Content-Type: application/pdf" --data-binary @signed.pdf</pre>
+<p class="sub">Or drop it on <a href="/verify" target="_blank">${esc(base)}/verify</a>. To have Acrobat show a trusted signer, load your own document-signing certificate (see the README). The server's current seal certificate is at <a href="/.well-known/hubsign-seal.pem">/.well-known/hubsign-seal.pem</a>.</p></div>
+<div class="card"><h2>Limits</h2><p class="sub">Requests are limited per API key (600 a minute by default). A <span class="mono">429</span> response carries <span class="mono">Retry-After</span>; every response carries <span class="mono">X-RateLimit-Remaining</span>. Bulk send accepts up to 500 envelopes per batch: <span class="mono">POST /v1/templates/{id}/bulk</span>, then poll <span class="mono">GET /v1/batches/{id}</span>.</p></div>
 <div class="card scroll"><h2>Endpoints</h2><table><tbody>
-${[["POST","/v1/envelopes","Create (and optionally send) an envelope"],["GET","/v1/envelopes","List, filter by status"],["GET","/v1/envelopes/{id}","Status, recipients, signing links, fields"],["POST","/v1/envelopes/{id}/send","Send a draft"],["POST","/v1/envelopes/{id}/void","Cancel a sent envelope"],["GET","/v1/envelopes/{id}/events","Audit trail"],["GET","/v1/envelopes/{id}/signed","Signed PDF with certificate"],["GET","/v1/envelopes/counts","Counts per status"],["POST","/v1/templates","Create a template (roles + fields)"],["POST","/v1/templates/{id}/envelopes","Send a template to real people"],["POST","/v1/webhooks","Register an endpoint"],["POST","/v1/webhooks/{id}/test","Send a test event"],["GET","/v1/webhooks/{id}/deliveries","Delivery log"]].map(r=>`<tr><td class="mono" style="width:70px"><b>${r[0]}</b></td><td class="mono">${r[1]}</td><td class="sub">${r[2]}</td></tr>`).join("")}</tbody></table></div>`;
+${[["POST","/v1/envelopes","Create (and optionally send) an envelope"],["GET","/v1/envelopes","List, filter by status"],["GET","/v1/envelopes/{id}","Status, recipients, signing links, fields"],["POST","/v1/envelopes/{id}/send","Send a draft"],["POST","/v1/envelopes/{id}/void","Cancel a sent envelope"],["GET","/v1/envelopes/{id}/events","Audit trail"],["GET","/v1/envelopes/{id}/signed","Signed PDF with certificate"],["GET","/v1/envelopes/counts","Counts per status"],["POST","/v1/templates","Create a template (roles + fields)"],["POST","/v1/templates/{id}/envelopes","Send a template to real people"],["POST","/v1/templates/{id}/bulk","Send a template to up to 500 people"],["GET","/v1/batches/{id}","Bulk batch progress and errors"],["POST","/v1/verify","Check a sealed PDF (public)"],["GET","/v1/org","Members and invitations"],["POST","/v1/webhooks","Register an endpoint"],["POST","/v1/webhooks/{id}/test","Send a test event"],["GET","/v1/webhooks/{id}/deliveries","Delivery log"]].map(r=>`<tr><td class="mono" style="width:70px"><b>${r[0]}</b></td><td class="mono">${r[1]}</td><td class="sub">${r[2]}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
 /* ---------- router ---------- */
 async function route(){
-  if(!state.me){try{state.me=await api("/auth/me")}catch{}}
-  if(!state.me)return authView(false);
   const [page,arg]=location.hash.replace(/^#/,"").split("/");
+  if(!state.me){try{state.me=await api("/auth/me")}catch{if(state.org){state.org="";lsSet("hs_org","");try{state.me=await api("/auth/me")}catch{}}}}
+  if(!state.me)return page==="invite"?authView(true,arg):authView(false);
+  if(state.me.org!==state.org&&state.org){state.org=state.me.org;lsSet("hs_org",state.org)}else if(!state.org){state.org=state.me.org}
   try{
-    if(page==="new")composerView(arg==="template"?"template":"envelope");
+    if(page==="invite"&&arg)await inviteView(arg);
+    else if(page==="team")await teamView();
+    else if(page==="new")composerView(arg==="template"?"template":"envelope");
     else if(page==="env"&&arg)await detailView(arg);
     else if(page==="agreements")await agreementsView(arg||"");
     else if(page==="templates")await templatesView();

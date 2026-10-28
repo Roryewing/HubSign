@@ -327,3 +327,33 @@ def test_templates_counts_search_and_prefilled_fields(env):
     assert env.client.get("/v1/envelopes?q=%25", headers=h).json()["envelopes"] == []  # wildcard is not a match-all
     assert env.client.delete(f"/v1/templates/{t['id']}", headers=h).status_code == 204
     assert env.client.get(f"/v1/templates/{t['id']}", headers=h).status_code == 404
+
+
+def test_backend_matches_configuration(env):
+    """Guards the Postgres run: if the suite claims to run on Postgres it must really be doing so."""
+    import os
+
+    assert env.app.state.db.pg == bool(os.environ.get("HUBSIGN_TEST_DATABASE_URL"))
+    if os.environ.get("HUBSIGN_TEST_PG") == "embedded":
+        assert env.app.state.db.pg
+
+
+def test_sdk_templates_bulk_and_verify(env):
+    from hubsign.sdk import HubSign
+
+    from .conftest import make_pdf
+
+    hs = HubSign(env.key, client=env.client)
+    t = hs.create_template(
+        make_pdf(1),
+        name="NDA",
+        roles=[{"name": "Signer"}],
+        fields=[{"recipient": 0, "type": "signature", "page": 1, "x": 0.1, "y": 0.1}],
+    )
+    one = hs.send_template(t["id"], [{"name": "A", "email": "a@x.co"}], send=True)
+    assert one["status"] == "sent"
+    b = hs.bulk_send(t["id"], [[{"name": "B", "email": "b@x.co"}], [{"name": "C", "email": "c@x.co"}]], send=True)
+    assert b["status"] == "done" and b["done"] == 2
+    sealed = env.client.get(f"/v1/envelopes/{one['id']}/signed")  # not completed yet: no sealed copy
+    assert sealed.status_code in (401, 404)
+    assert hs.verify(make_pdf(1))["signed"] is False

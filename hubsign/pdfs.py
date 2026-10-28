@@ -77,7 +77,15 @@ def _overlay(w: float, h: float, fields: list[dict], sandbox: bool) -> bytes:
     return buf.getvalue()
 
 
-def certificate(env: dict, recipients: list[dict], events: list[dict]) -> bytes:
+def _auth(r: dict) -> str:
+    m = r.get("auth_method", "none")
+    label = {"none": "Link only", "access_code": "Access code", "sms": "SMS code", "email": "Email code"}.get(m, m)
+    return f"{label}" + (f" ({r['verified_at'][:19]}Z)" if r.get("verified_at") else "")
+
+
+def certificate(
+    env: dict, recipients: list[dict], events: list[dict], org_name: str = "", verify_url: str = ""
+) -> bytes:
     st = getSampleStyleSheet()
     small = st["BodyText"].clone("small", fontSize=8, leading=10)
     P = lambda t: Paragraph(escape(str(t if t is not None else "")), small)  # noqa: E731
@@ -103,6 +111,7 @@ def certificate(env: dict, recipients: list[dict], events: list[dict]) -> bytes:
         Table(
             [
                 [P("Subject"), P(env["subject"])],
+                [P("Sent by"), P(org_name)],
                 [P("Document"), P(f"{env['doc_name']} ({env['pages']} pages)")],
                 [P("Original SHA-256"), P(env["doc_sha256"])],
                 [P("Created"), P(env["created_at"])],
@@ -114,12 +123,20 @@ def certificate(env: dict, recipients: list[dict], events: list[dict]) -> bytes:
         Spacer(1, 12),
         Paragraph("Signers", st["Heading3"]),
         Table(
-            [head("Name", "Email", "Role", "Status", "Signed at (UTC)", "IP")]
+            [head("Name", "Email", "Role", "Status", "Identity check", "Signed at (UTC)", "IP")]
             + [
-                [P(r["name"]), P(r["email"]), P(r["role"]), P(r["status"]), P(r["signed_at"]), P(r["sign_ip"])]
+                [
+                    P(r["name"]),
+                    P(r["email"]),
+                    P(r["role"]),
+                    P(r["status"]),
+                    P(_auth(r)),
+                    P(r["signed_at"]),
+                    P(r["sign_ip"]),
+                ]
                 for r in recipients
             ],
-            colWidths=[90, 130, 45, 55, 110, 80],
+            colWidths=[70, 105, 38, 45, 75, 95, 60],
             style=grid,
             repeatRows=1,
         ),
@@ -133,13 +150,21 @@ def certificate(env: dict, recipients: list[dict], events: list[dict]) -> bytes:
             repeatRows=1,
         ),
         Spacer(1, 10),
-        Paragraph("The SHA-256 above is of the original document as uploaded. Verify a copy with `sha256sum`.", small),
+        Paragraph(
+            "The SHA-256 above is of the original document as uploaded. This file carries a cryptographic seal (PAdES): "
+            "any change after sealing breaks it. Check a copy at "
+            + escape(verify_url or "/verify")
+            + " or open it in Adobe Acrobat.",
+            small,
+        ),
     ]
     doc.build(story)
     return buf.getvalue()
 
 
-def finalize(original: bytes, fields: list[dict], cert: bytes, sandbox: bool) -> bytes:
+def finalize(
+    original: bytes, fields: list[dict], cert: bytes, sandbox: bool, eid: str = "", subject: str = ""
+) -> bytes:
     # ponytail: page /Rotate is ignored; rotated source pages would misplace stamps
     r = PdfReader(io.BytesIO(original))
     out = PdfWriter()
@@ -151,6 +176,7 @@ def finalize(original: bytes, fields: list[dict], cert: bytes, sandbox: bool) ->
             added.merge_page(PdfReader(io.BytesIO(_overlay(w, h, here, sandbox))).pages[0])
     for page in PdfReader(io.BytesIO(cert)).pages:
         out.add_page(page)
+    out.add_metadata({"/Title": subject[:200], "/Producer": "HubSign", "/HubSignEnvelope": eid})
     buf = io.BytesIO()
     out.write(buf)
     return buf.getvalue()

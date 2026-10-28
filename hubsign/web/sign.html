@@ -82,13 +82,29 @@ async function start(){
   try{S.info=await call("")}catch(e){$("#root").innerHTML=`<div class="card state"><h1>Link not found</h1><p class="muted">Check that you copied the whole link.</p></div>`;return}
   $("#msg").textContent=S.info.subject;
   if(S.info.sandbox)$("#ribbon").innerHTML=`<div class="ribbon">Sandbox: this is a test document and is not legally binding.</div>`;
+  if(S.info.state==="verify")return verifyView();
   if(S.info.state!=="ready")return endState(S.info.state);
-  $("#root").innerHTML=`<div class="card" style="max-width:600px;margin:6vh auto"><h1>Please review and act on these documents</h1><p class="muted">${esc(S.info.recipient.name)}, you have been asked to review and sign <b>${esc(S.info.subject)}</b>.</p>${S.info.message?`<p style="white-space:pre-wrap;background:var(--mute-bg);padding:12px;border-radius:8px">${esc(S.info.message)}</p>`:""}
+  $("#root").innerHTML=`<div class="card" style="max-width:600px;margin:6vh auto"><h1>Please review and act on these documents</h1><p class="muted">${esc(S.info.recipient.name)}, ${S.info.sender?`${esc(S.info.sender)} has`:"you have"} asked you to review and sign <b>${esc(S.info.subject)}</b>.</p>${S.info.message?`<p style="white-space:pre-wrap;background:var(--mute-bg);padding:12px;border-radius:8px">${esc(S.info.message)}</p>`:""}
   <label class="chk"><input type="checkbox" id="consent"><span>I agree to use electronic records and signatures.</span></label>
   <details><summary>Electronic record and signature disclosure</summary><p>You may sign electronically instead of on paper. You can ask the sender for a paper copy, withdraw your consent before signing, or decline to sign. Your signature, the time, and your IP address are recorded in the certificate of completion. To read the document you need a current web browser and a PDF-capable device.</p></details>
   <button class="btn y" id="go" disabled>CONTINUE</button> <button class="btn link" id="dec0">Decline</button></div>`;
   $("#consent").onchange=e=>$("#go").disabled=!e.target.checked;
   $("#go").onclick=()=>sign();$("#dec0").onclick=declineModal;
+}
+
+/* ---------- identity check ---------- */
+function verifyView(){
+  const a=S.info.auth,code=a.method==="access_code",sent=()=>$("#vmsg");
+  $("#root").innerHTML=`<div class="card" style="max-width:520px;margin:8vh auto"><h1>Verify it's you</h1>
+  <p class="muted">${S.info.sender?`${esc(S.info.sender)} wants`:"The sender wants"} to be sure it is really ${esc(S.info.recipient.name)} opening <b>${esc(S.info.subject)}</b>.</p>
+  ${code?`<p>Enter the access code ${S.info.sender?esc(S.info.sender)+" gave":"you were given"} you.</p>`:`<p>We will send a six-digit code ${a.method==="sms"?"by text message to":"by email to"} <b>${esc(a.hint)}</b>.</p><button class="btn" id="send">SEND CODE</button>`}
+  <label class="f" style="margin-top:14px">${code?"Access code":"Verification code"}<input type="text" id="code" inputmode="${code?"text":"numeric"}" autocomplete="one-time-code" maxlength="64" ${code?"":"disabled"}></label>
+  <div id="vmsg" aria-live="polite"></div><div style="margin-top:14px"><button class="btn y" id="vgo" ${code?"":"disabled"}>CONTINUE</button></div>
+  ${S.info.sandbox?'<p class="muted" style="font-size:12.5px">Sandbox: no message is sent. The code is 000000.</p>':""}</div>`;
+  const msg=(t,bad)=>{sent().innerHTML=`<div class="${bad?"err":"muted"}" style="margin-top:10px">${esc(t)}</div>`};
+  if(!code)$("#send").onclick=async()=>{$("#send").disabled=true;try{await call("/auth/send",{});msg("Code sent. It is valid for 10 minutes.");$("#code").disabled=false;$("#vgo").disabled=false;$("#code").focus()}catch(e){msg(e.message,true)}setTimeout(()=>{const b=$("#send");if(b){b.disabled=false;b.textContent="SEND A NEW CODE"}},15000)};
+  const go=async()=>{$("#vgo").disabled=true;try{await call("/auth/verify",{code:$("#code").value});start()}catch(e){msg(e.message,true);$("#vgo").disabled=false}};
+  $("#vgo").onclick=go;$("#code").onkeydown=e=>{if(e.key==="Enter")go()};
 }
 
 /* ---------- signing ---------- */
