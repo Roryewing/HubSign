@@ -18,6 +18,8 @@ services:
         sync: false # set to the service URL after the first deploy, e.g. https://hubsign.onrender.com
       - key: HUBSIGN_TRUST_PROXY_HOPS
         value: "1" # Render puts one proxy in front
+      - key: HUBSIGN_FIRST_USER_EMAIL
+        sync: false # your email: only it may create the first account
       - key: HUBSIGN_ALLOW_SIGNUP
         value: "false" # first account is always allowed; this closes registration after it
       - key: HUBSIGN_SECRET
