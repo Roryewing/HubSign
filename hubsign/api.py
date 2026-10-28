@@ -119,9 +119,8 @@ class FieldIn(BaseModel):
     anchor: AnchorIn | None = Field(default=None, description="Place by text in the PDF instead of x and y")
     required: bool = True
     label: str = Field(default="", max_length=100, description="A name for the field; form data is returned by label")
-    value: str | None = Field(
-        default=None, max_length=4000, description="Prefill a text or checkbox field; the signer cannot change it"
-    )
+    value: str | None = Field(default=None, max_length=4000, description="Prefill a text or checkbox field")
+    editable: bool = Field(default=False, description="With a value: the signer may change it. Otherwise it is locked")
 
     @model_validator(mode="after")
     def _where(self):

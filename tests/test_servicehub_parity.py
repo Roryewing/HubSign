@@ -303,3 +303,35 @@ def test_reassign(make_env, monkeypatch):
 def test_positioned_fields_still_validated(env, bad):
     r = env.envelope(fields=[{"recipient": 0, "type": "signature", "page": 1, **bad}])
     assert r.status_code == 422
+
+
+def test_editable_prefill_is_a_default_the_signer_may_change(env):
+    pdf = anchored_pdf(1, [(1, "~a~", 100, 300), (1, "~b~", 100, 200), (1, "~c~", 100, 100)])
+    f = lambda label, anchor, **kw: {
+        "recipient": 0,
+        "type": "text",
+        "label": label,
+        "required": False,
+        "anchor": {"text": anchor, "y_offset": -8},
+        **kw,
+    }  # noqa: E731
+    fields = [f("kept", "~a~", value="Default A", editable=True), f("changed", "~b~", value="Default B", editable=True), f("cleared", "~c~", value="Default C", editable=True),
+              {"recipient": 0, "type": "signature", "page": 1, "x": 0.1, "y": 0.8}]  # fmt: skip
+    e = env.envelope(
+        document_base64=b64(pdf), recipients=[{"name": "A", "email": "a@example.com"}], fields=fields, send=True
+    ).json()
+    t = token(e["recipients"][0]["signing_url"])
+    info, vals = fill_for(env, t)
+    by = {x["label"]: x for x in info["fields"] if x["label"]}
+    assert all(not by[k]["locked"] and by[k]["value"].startswith("Default") for k in by)  # shown as editable defaults
+    vals = {k: v for k, v in vals.items() if k not in {by["kept"]["id"], by["changed"]["id"], by["cleared"]["id"]}}
+    vals[by["changed"]["id"]] = "Edited B"
+    vals[by["cleared"]["id"]] = ""
+    assert (
+        env.client.post(f"/sign-api/{t}/complete", json={"consent": True, "values": vals}).json()["state"]
+        == "completed"
+    )
+    assert env.client.get(f"/v1/envelopes/{e['id']}/form_data", headers=env.h).json()["form_data"] == {
+        "kept": "Default A",
+        "changed": "Edited B",
+    }

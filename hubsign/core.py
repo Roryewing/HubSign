@@ -225,7 +225,7 @@ class Service:
             which = f.get("document")
             if which is not None and not 0 <= which < len(parts):
                 raise Error(422, f"unknown document index {which}")
-            base = {k: f.get(k) for k in ("recipient", "type", "required", "label", "value")}
+            base = {k: f.get(k) for k in ("recipient", "type", "required", "label", "value", "editable")}
             base["label"] = base["label"] or ""
             anchor = f.get("anchor")
             if not anchor:
@@ -292,11 +292,11 @@ class Service:
                  int(bool(r.get("embedded"))), r.get("return_url")),
             )  # fmt: skip
         for f in fields:
-            locked = f.get("value") is not None
+            locked = f.get("value") is not None and not f.get("editable")
             self.db.x(
                 "INSERT INTO fields(id,envelope_id,recipient_id,type,page,x,y,w,h,required,label,value,locked) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (rid("fld"), eid, ids[f["recipient"]], f["type"], f["page"], f["x"], f["y"], f["w"], f["h"], int(f["required"]), f["label"] or "",
-                 f["value"] if locked else None, int(locked)),
+                 f.get("value"), int(locked)),
             )  # fmt: skip
         self._event(eid, "created", "api")
         return eid
@@ -582,8 +582,8 @@ class Service:
                 (r["id"],),
             )
         for f in fields:
-            if f["type"] in ("signature", "initials") or not f["locked"]:
-                f["value"] = None  # only prefilled text is sent down
+            if f["type"] in ("signature", "initials"):
+                f["value"] = None  # the prefilled text goes down (locked, or an editable default); images never do
         base["return_url"] = r["return_url"]
         base["allow_reassign"] = (
             bool(e["allow_reassign"]) and r["role"] == "signer" and r["auth_method"] in ("none", "email")
@@ -643,7 +643,9 @@ class Service:
         for f in mine:
             if f["locked"]:
                 continue  # prefilled by the sender: the signer cannot change it
-            v = values.get(f["id"])
+            v = (
+                values[f["id"]] if f["id"] in values else f["value"]
+            )  # an editable prefill stands unless they changed it
             if f["type"] == "date":
                 v = datetime.now(UTC).date().isoformat()  # never trust a client-supplied signing date
             elif f["type"] in ("name", "email"):
@@ -661,8 +663,11 @@ class Service:
                 raise Error(422, f"required {f['type']} field is empty")
             if v:
                 clean[f["id"]] = v
-        for fid, v in clean.items():
-            self.db.x("UPDATE fields SET value=? WHERE id=?", (v, fid))
+        for f in mine:
+            if not f["locked"]:
+                self.db.x(
+                    "UPDATE fields SET value=? WHERE id=?", (clean.get(f["id"]), f["id"])
+                )  # cleared fields lose their default
         if not self.db.x(
             "UPDATE recipients SET status='signed', signed_at=?, sign_ip=? WHERE id=? AND status IN ('sent','viewed')",
             (now(), ip, r["id"]),

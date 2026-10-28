@@ -118,6 +118,7 @@ async function sign(){
   $("#oa").onclick=e=>{e.stopPropagation();$("#oam").hidden=!$("#oam").hidden};document.onclick=()=>{const m=$("#oam");if(m)m.hidden=true};
   $("#mdec").onclick=declineModal;if($("#mre"))$("#mre").onclick=reassignModal;$("#mdl").onclick=()=>{location.href=A("/document")};$("#mchg").onclick=()=>adoptModal(()=>{});
   $("#fin").onclick=finish;
+  S.info.fields.forEach(f=>{if(!f.locked&&f.value&&f.type!=="signature"&&f.type!=="initials"&&S.vals[f.id]===undefined)S.vals[f.id]=f.type==="checkbox"?f.value==="true":f.value});
   const buf=await (await fetch(A("/document"))).arrayBuffer();
   pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise,host=$("#pdf");host.innerHTML="";
