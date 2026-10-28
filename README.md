@@ -32,7 +32,12 @@ of completion. Everything the web app does is available over a documented REST A
 | API keys | `hs_test_…` and `hs_live_…`, each **viewer, sender or admin**, shown once, stored hashed, revocable, last-used tracking. Leaving the organisation revokes the keys you made |
 | Sandbox | Separate data for test keys. Sandbox PDFs carry a watermark; one-time codes are always `000000` and nothing is sent |
 | Webhooks | 9 events, per-endpoint subscriptions, HMAC-SHA256 signature with timestamp, retries after 5 s / 1 min / 10 min that survive restarts, delivery log, redeliver, test event |
-| Embedded signing | Every active recipient has a `signing_url` in the API response |
+| Embedded signing | Every active recipient has a `signing_url` in the API response. Mark a recipient `embedded` and no email is sent; give a `return_url` and the signer's browser is sent back to your app afterwards |
+| Field placement | By position, or by **anchor text** printed in the PDF (even invisibly): one field per occurrence, with point offsets, the way DocuSign anchor tabs work |
+| Several documents | `documents: [...]` in one envelope, one signing session, one sealed PDF. Each document can also be downloaded on its own, sealed as an excerpt |
+| Prefilled fields | A text or checkbox field with a `value` is filled in and locked; `label` names a field, and `GET /v1/envelopes/{id}/form_data` returns what signers typed, by label |
+| Reassign | `allow_reassign` lets a signer hand their part to someone else; the old link dies, the audit trail records it |
+| Email | SendGrid API (or SMTP), HTML emails, per-envelope `reply_to` and `sender_name` |
 | Python SDK | `hubsign.sdk.HubSign`: envelopes, templates, bulk send, verify, webhooks, plus `verify_signature()` for receivers |
 
 ## Quick start
@@ -112,7 +117,8 @@ warning if it sees an https base URL with this unset. Use HTTPS; session cookies
 | `HUBSIGN_SEAL_CERT_FILE`, `_KEY_FILE`, `_CHAIN_FILE`, `_KEY_PASSWORD` | Your document-signing certificate. Blank = self-signed |
 | `HUBSIGN_TSA_URL` | RFC 3161 timestamp authority |
 | `HUBSIGN_TWILIO_SID`, `_TOKEN`, `_FROM` | Enables SMS codes in live mode |
-| `HUBSIGN_SMTP_*` | Enables email delivery and email codes in live mode |
+| `HUBSIGN_SENDGRID_API_KEY`, `HUBSIGN_MAIL_FROM`, `HUBSIGN_MAIL_FROM_NAME` | Email through SendGrid's API. The from address must be verified in SendGrid |
+| `HUBSIGN_SMTP_*` | Email through SMTP instead (SendGrid also offers an SMTP relay) |
 | `HUBSIGN_RATE_API_PER_MIN` (600), `_SIGN_` (120), `_AUTH_` (30), `_PUBLIC_` (20) | Rate limits per minute, 0 disables |
 | `HUBSIGN_ALLOW_SIGNUP` | The first account is always allowed; false closes registration (invitations still work) |
 

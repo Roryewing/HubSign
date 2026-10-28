@@ -22,6 +22,7 @@ EVENTS = [
     "recipient.viewed",
     "recipient.signed",
     "recipient.declined",
+    "recipient.reassigned",
     "recipient.auth_failed",
 ]
 

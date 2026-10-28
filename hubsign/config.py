@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     seal_key_password: str = ""
     tsa_url: str = ""  # RFC 3161 timestamp authority, e.g. http://timestamp.digicert.com
     bulk_max_rows: int = 500
+    sendgrid_api_key: str = ""  # email through SendGrid's API; takes precedence over SMTP
+    mail_from: str = ""  # a sender address verified with your email provider; falls back to smtp_from
+    mail_from_name: str = "HubSign"
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""

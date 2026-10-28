@@ -22,5 +22,15 @@ services:
         value: "false" # first account is always allowed; this closes registration after it
       - key: HUBSIGN_SECRET
         generateValue: true
+      - key: HUBSIGN_SENDGRID_API_KEY
+        sync: false
+      - key: HUBSIGN_MAIL_FROM
+        sync: false # an address verified in SendGrid
+      - key: HUBSIGN_TWILIO_SID
+        sync: false
+      - key: HUBSIGN_TWILIO_TOKEN
+        sync: false
+      - key: HUBSIGN_TWILIO_FROM
+        sync: false
       - key: HUBSIGN_TSA_URL
         value: http://timestamp.digicert.com
