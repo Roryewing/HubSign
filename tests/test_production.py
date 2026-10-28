@@ -423,3 +423,23 @@ def test_oversized_and_chunked_bodies_are_refused_before_reading(make_env):
         == 413
     )
     assert env.client.post("/v1/verify", content=iter([b"abc", b"def"])).status_code == 411  # chunked
+
+
+def test_documents_in_the_database(make_env):
+    """No disk, no bucket: PDFs live in the database. The whole flow, including the sealed copy and excerpts, works."""
+    env = make_env(documents_in_database=True)
+    e = env.envelope().json()
+    done = sign_all(env, e)
+    assert done["status"] == "completed"
+    assert not list(env.settings.data_dir.rglob("*.pdf"))  # nothing was written to disk
+    db = env.app.state.db
+    assert sorted(r["k"] for r in db.q("SELECT k FROM blobs")) == [f"{e['id']}.pdf", f"{e['id']}.signed.pdf"]
+    assert env.client.post(
+        "/v1/verify", content=env.client.get(f"/v1/envelopes/{e['id']}/signed", headers=env.h).content
+    ).json()["ok"]
+    assert env.client.get("/api/ready").status_code == 200
+    drafts = env.envelope(send=False).json()
+    assert env.client.delete(f"/v1/envelopes/{drafts['id']}", headers=env.h).status_code == 204
+    assert (
+        db.one("SELECT 1 AS x FROM blobs WHERE k=?", (f"{drafts['id']}.pdf",)) is None
+    )  # deleting a draft deletes its file

@@ -99,6 +99,7 @@ hubsign/
 
 | Setup | How |
 |---|---|
+| Free | Render free web service + Neon free PostgreSQL with documents in the database. Step by step and the limits: [docs/FREE_HOSTING.md](docs/FREE_HOSTING.md) |
 | One node | `docker compose up -d` or the Render blueprint. SQLite file and PDFs on a persistent disk. Back up `/data` |
 | Several nodes | Set `HUBSIGN_DATABASE_URL` (PostgreSQL) and `HUBSIGN_S3_BUCKET`. Any node can serve any request. Put a load balancer in front |
 
