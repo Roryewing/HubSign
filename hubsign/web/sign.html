@@ -5,47 +5,51 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <title>HubSign - Review and sign</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314233f'/%3E%3Cpath d='M8 21c4-9 6-9 6-3s3 3 10-5' stroke='%23ffc233' stroke-width='2.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234b2bd6'/%3E%3Cpath d='M8 21c4-9 6-9 6-3s3 3 10-5' stroke='%23ffd23f' stroke-width='2.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Dancing+Script:wght@600&family=Great+Vibes&family=Inter:wght@400;500;600;700&family=Satisfy&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#eef1f7;--surface:#fff;--ink:#0f1b33;--muted:#5b667a;--line:#dfe4ee;--brand:#14233f;--primary:#2c4bd6;--primary-h:#2340b8;--primary-ink:#fff;--accent:#ffc233;--accent-ink:#2b2100;--ok:#17794a;--ok-bg:#e3f4ea;--bad:#b92f2f;--bad-bg:#fbe7e7;--warn-bg:#fff3d6;--warn:#8a5a00;--mute-bg:#e6eaf3}
-@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0b1122;--surface:#131c33;--ink:#e8ecf6;--muted:#9aa6bf;--line:#26324f;--brand:#080d1b;--primary:#7b92ff;--primary-h:#98a9ff;--primary-ink:#0b1122;--ok:#58d394;--ok-bg:#12332a;--bad:#ff8a8a;--bad-bg:#3a1b22;--warn-bg:#3a2f12;--warn:#ffcf70;--mute-bg:#1c2641;color-scheme:dark}}
-:root[data-theme=dark]{--bg:#0b1122;--surface:#131c33;--ink:#e8ecf6;--muted:#9aa6bf;--line:#26324f;--brand:#080d1b;--primary:#7b92ff;--primary-h:#98a9ff;--primary-ink:#0b1122;--ok:#58d394;--ok-bg:#12332a;--bad:#ff8a8a;--bad-bg:#3a1b22;--warn-bg:#3a2f12;--warn:#ffcf70;--mute-bg:#1c2641;color-scheme:dark}
+:root{--bg:#e9e8f1;--surface:#fff;--ink:#150f33;--muted:#645f7d;--line:#dcdaea;--hdr:#1b1633;--primary:#4b2bd6;--primary-ink:#fff;--sign:#ffd23f;--sign-ink:#2a2000;--sign-bg:rgba(255,210,63,.55);--ok:#127a4a;--ok-bg:#e1f5ea;--bad:#b3261e;--bad-bg:#fce8e6;--warn-bg:#fff2d1;--warn:#8a5a00;--mute-bg:#eeedf6}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0e0b1f;--surface:#171331;--ink:#ece9fb;--muted:#a09bbd;--line:#2b2650;--hdr:#0a0818;--primary:#8d78ff;--primary-ink:#0e0b1f;--ok:#5fd69b;--ok-bg:#12332a;--bad:#ff8f87;--bad-bg:#3b1c20;--warn-bg:#3a3012;--warn:#ffd27a;--mute-bg:#1f1a40;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#0e0b1f;--surface:#171331;--ink:#ece9fb;--muted:#a09bbd;--line:#2b2650;--hdr:#0a0818;--primary:#8d78ff;--primary-ink:#0e0b1f;--ok:#5fd69b;--ok-bg:#12332a;--bad:#ff8f87;--bad-bg:#3b1c20;--warn-bg:#3a3012;--warn:#ffd27a;--mute-bg:#1f1a40;color-scheme:dark}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,sans-serif;padding-bottom:90px}
-header{background:var(--brand);color:#fff;display:flex;align-items:center;gap:12px;padding:0 max(16px,env(safe-area-inset-left));height:54px;position:sticky;top:0;z-index:20}
-header .logo{display:flex;gap:8px;align-items:center;font-weight:700;font-size:17px}
-header .subj{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#c9d3ea;font-size:13.5px}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,sans-serif}
+header{background:var(--hdr);color:#fff;display:flex;align-items:center;gap:14px;padding:0 max(16px,env(safe-area-inset-left));height:58px;position:sticky;top:0;z-index:30}
+.logo{display:flex;gap:9px;align-items:center;font-weight:700;font-size:18px;letter-spacing:-.02em;white-space:nowrap}
+header .msg{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#cfc9ee;font-size:13.5px}
+.fin{background:var(--sign);color:var(--sign-ink);border:0;border-radius:6px;padding:9px 22px;font:inherit;font-weight:700;letter-spacing:.04em;cursor:pointer}.fin[disabled]{opacity:.4;cursor:not-allowed}
+.oa{background:none;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:6px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+.menuwrap{position:relative}.menu{position:absolute;right:0;top:calc(100% + 8px);background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.3);min-width:220px;padding:6px;z-index:40}
+.menu button{display:block;width:100%;text-align:left;padding:9px 12px;border-radius:7px;background:none;border:0;color:inherit;font:inherit;cursor:pointer}.menu button:hover{background:var(--mute-bg)}
 .ribbon{background:var(--warn-bg);color:var(--warn);text-align:center;padding:5px 16px;font-size:12.5px;font-weight:500}
-.wrap{max-width:860px;margin:0 auto;padding:22px max(16px,env(safe-area-inset-left))}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px}
-h1{font-size:21px;margin:0 0 6px}p{margin:6px 0}.muted{color:var(--muted)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 18px;border-radius:10px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none}
-.btn.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-ink)}.btn.primary:hover{background:var(--primary-h)}.btn[disabled]{opacity:.45;cursor:not-allowed}.btn.link{border:0;background:none;color:var(--muted);text-decoration:underline;padding:6px}
-input[type=text],textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:9px 11px;width:100%}
-.pdfwrap{display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:16px}
-.pg{position:relative;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.2);flex:none;max-width:100%}.pg canvas{display:block}
-.fld{position:absolute;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;cursor:pointer;overflow:hidden;color:#2b2100;user-select:none}
-.fld.todo{background:var(--accent);border:2px solid #d99a00;animation:pulse 1.6s ease-in-out infinite}.fld.done{background:rgba(23,121,74,.08);border:1.5px solid rgba(23,121,74,.45)}
-.fld.opt{background:#fff3c4;border:1.5px dashed #d99a00}.fld.fixed{background:rgba(0,0,0,.04);border:1px solid rgba(0,0,0,.15);color:#222;cursor:default;font-weight:500;font-size:12px}
-.fld img{width:100%;height:100%;object-fit:contain}.fld input[type=text]{border:0;background:transparent;height:100%;padding:0 4px;font-size:12px;color:#111;border-radius:0}.fld input[type=checkbox]{width:70%;height:70%}
-@keyframes pulse{50%{box-shadow:0 0 0 4px rgba(255,194,51,.45)}}
-@media (prefers-reduced-motion:reduce){.fld.todo{animation:none}}
-.bar{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:12px max(16px,env(safe-area-inset-left)) calc(12px + env(safe-area-inset-bottom,0px));display:flex;gap:12px;align-items:center;justify-content:space-between;z-index:30}
-.bar .l{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.modal{position:fixed;inset:0;background:rgba(5,10,25,.6);display:grid;place-items:center;z-index:50;padding:16px}
-.modal .box{background:var(--surface);border-radius:14px;padding:20px;width:100%;max-width:520px;max-height:92vh;overflow:auto}
-.tabs{display:flex;gap:4px;margin:10px 0}.tabs button{border:0;background:var(--mute-bg);color:var(--muted);padding:7px 16px;border-radius:8px;font:inherit;font-weight:600;cursor:pointer}.tabs button.on{background:var(--primary);color:var(--primary-ink)}
-canvas.draw{width:100%;aspect-ratio:3/1;background:#fff;border:1px dashed var(--line);border-radius:10px;touch-action:none;cursor:crosshair}
-.prev{height:120px;background:#fff;border:1px solid var(--line);border-radius:10px;display:grid;place-items:center;overflow:hidden}.prev img{max-width:100%;max-height:100%}
-.state{text-align:center;padding:40px 16px}.state .ico{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;margin:0 auto 12px;font-size:28px}
-.err{background:var(--bad-bg);color:var(--bad);padding:9px 12px;border-radius:9px;margin:10px 0;font-weight:500}
-label.chk{display:flex;gap:10px;align-items:flex-start;margin:14px 0;font-weight:500}label.chk input{margin-top:4px;width:18px;height:18px}
+.wrap{max-width:900px;margin:0 auto;padding:22px max(16px,env(safe-area-inset-left)) 60px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:26px;box-shadow:0 8px 30px rgba(21,15,51,.1)}
+h1{font-size:22px;margin:0 0 6px;font-weight:600;letter-spacing:-.01em}p{margin:6px 0}.muted{color:var(--muted)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 22px;border-radius:6px;font:inherit;font-weight:700;letter-spacing:.03em;cursor:pointer;text-decoration:none}
+.btn.y{background:var(--sign);border-color:var(--sign);color:var(--sign-ink)}.btn[disabled]{opacity:.45;cursor:not-allowed}.btn.link{border:0;background:none;color:var(--muted);text-decoration:underline;padding:6px;font-weight:500;letter-spacing:0}
+input[type=text],textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px;width:100%}
+.pdfwrap{display:flex;flex-direction:column;align-items:center;gap:14px}
+.pg{position:relative;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.25);flex:none;max-width:100%}.pg canvas{display:block}
+.fld{position:absolute;border-radius:3px;display:flex;align-items:center;justify-content:flex-start;gap:5px;padding:0 6px;font-size:12px;font-weight:700;cursor:pointer;overflow:hidden;color:var(--sign-ink);user-select:none}
+.fld.todo{background:var(--sign-bg);border:2px solid #e0a800}.fld.done{background:rgba(255,210,63,.12);border:1.5px solid rgba(224,168,0,.5);padding:0}.fld.opt{background:rgba(255,210,63,.22);border:1.5px dashed #e0a800}
+.fld.fixed{background:rgba(75,43,214,.06);border:1px solid rgba(75,43,214,.25);color:#1b1633;cursor:default;font-weight:500;font-size:12px}
+.fld img{width:100%;height:100%;object-fit:contain}.fld input[type=text]{border:0;background:transparent;height:100%;padding:0 2px;font-size:12px;color:#111;border-radius:0}.fld input[type=checkbox]{width:70%;height:70%;margin:0 auto}
+.fld .req{margin-left:auto;font-size:9.5px;font-weight:600;opacity:.75}
+.flag{position:absolute;background:var(--sign);color:var(--sign-ink);font-weight:700;font-size:12px;padding:4px 14px 4px 10px;clip-path:polygon(0 0,calc(100% - 9px) 0,100% 50%,calc(100% - 9px) 100%,0 100%);cursor:pointer;z-index:5;white-space:nowrap;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3))}
+.modalbg{position:fixed;inset:0;background:rgba(10,6,30,.6);display:grid;place-items:center;z-index:60;padding:16px}.modalbg .box{background:var(--surface);border-radius:12px;padding:24px;width:100%;max-width:620px;max-height:94vh;overflow:auto}
+label.f{display:flex;flex-direction:column;gap:5px;font-weight:600;font-size:12.5px;color:var(--muted)}
+.styles{display:grid;gap:8px;margin:10px 0}.sty{display:grid;grid-template-columns:24px 1fr 90px;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}.sty.on{border-color:var(--primary);background:var(--mute-bg)}.sty .sg{font-size:32px;line-height:1.1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.sty .in{font-size:26px;text-align:center}.sty .by{font:600 10px Inter,sans-serif;color:var(--muted);display:block;letter-spacing:.04em}
+.tabs{display:flex;gap:4px;margin:14px 0 8px;border-bottom:1px solid var(--line)}.tabs button{border:0;background:none;color:var(--muted);padding:8px 16px;font:inherit;font-weight:600;cursor:pointer;border-bottom:2px solid transparent}.tabs button.on{color:var(--ink);border-color:var(--primary)}
+canvas.draw{width:100%;aspect-ratio:3/1;background:#fff;border:1px dashed var(--line);border-radius:8px;touch-action:none;cursor:crosshair}
+.state{text-align:center;padding:30px 12px}.state .ico{width:60px;height:60px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;font-size:30px}
+.err{background:var(--bad-bg);color:var(--bad);padding:9px 12px;border-radius:8px;margin:10px 0;font-weight:500}
+label.chk{display:flex;gap:10px;align-items:flex-start;margin:16px 0 6px;font-weight:500}label.chk input{margin-top:4px;width:18px;height:18px}
+details{margin:6px 0 14px;color:var(--muted);font-size:13px}details p{margin:8px 0}
+@media (max-width:640px){header .msg{display:none}.sty{grid-template-columns:20px 1fr 60px}}
 </style>
 </head>
 <body>
-<header><span class="logo"><svg width="24" height="24" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#ffc233"/><path d="M8 21c4-9 6-9 6-3s3 3 10-5" stroke="#14233f" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>HubSign</span><span class="subj" id="subj"></span></header>
+<header><span class="logo"><svg width="26" height="26" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#ffd23f"/><path d="M8 21c4-9 6-9 6-3s3 3 10-5" stroke="#1b1633" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>HubSign</span><span class="msg" id="msg"></span><span id="hright"></span></header>
 <div id="ribbon"></div>
 <div class="wrap" id="root"><div class="state muted">Loading…</div></div>
 <div id="overlay"></div>
@@ -55,114 +59,137 @@ label.chk{display:flex;gap:10px;align-items:flex-start;margin:14px 0;font-weight
 const T=location.pathname.split("/").filter(Boolean)[1]||"";
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const S={info:null,consent:false,vals:{},adopted:{signature:null,initials:null}};
+const S={info:null,vals:{},adopted:null,started:false};
 const A=p=>`/sign-api/${encodeURIComponent(T)}${p}`;
+const FONTS=[["Dancing Script","Dancing Script"],["Great Vibes","Great Vibes"],["Caveat","Caveat"],["Satisfy","Satisfy"]];
+const FIXED=["date","name","email"];
 async function call(p,body){const r=await fetch(A(p),body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{});let j=null;try{j=await r.json()}catch{}
   if(!r.ok){const d=j&&j.detail;throw new Error(Array.isArray(d)?d.map(x=>x.msg).join("; "):d||"Something went wrong")}return j}
 
 const MESSAGES={
   waiting:["⏳","It is not your turn yet","Another signer needs to go first. We will email you when it is ready."],
-  signed:["✓","You have signed","Thank you. Everyone else still needs to sign. You will get a copy when the document is complete."],
+  signed:["✓","You're all set","Thank you for signing. Other people still need to sign, and you will get a copy when the document is complete."],
   declined:["✕","This document was declined","Nobody can sign it now. Contact the sender if this was a mistake."],
   voided:["✕","This document was cancelled","The sender cancelled it. Contact them if you think this is wrong."],
-  completed:["✓","All signatures collected","The document is complete. Download your signed copy with its certificate."]
+  completed:["✓","You're all set","Everyone has signed. Download your signed copy with its certificate of completion."]
 };
 function endState(st){
-  const [i,h,t]=MESSAGES[st];$("#overlay").innerHTML="";$("#root").innerHTML=`<div class="card state"><div class="ico" style="background:${st==="completed"||st==="signed"?"var(--ok-bg);color:var(--ok)":"var(--mute-bg);color:var(--muted)"}">${i}</div><h1>${h}</h1><p class="muted">${t}</p>${st==="completed"?`<p><a class="btn primary" href="${A("/signed")}">Download signed PDF</a></p>`:""}</div>`;
-  document.querySelector(".bar")?.remove();
+  const [i,h,t]=MESSAGES[st];$("#overlay").innerHTML="";$("#hright").innerHTML="";$("#msg").textContent="";
+  $("#root").innerHTML=`<div class="card state"><div class="ico" style="background:${st==="completed"||st==="signed"?"var(--ok-bg);color:var(--ok)":"var(--mute-bg);color:var(--muted)"}">${i}</div><h1>${h}</h1><p class="muted">${t}</p>${st==="completed"?`<p style="margin-top:18px"><a class="btn y" href="${A("/signed")}">DOWNLOAD</a></p>`:""}</div>`;
 }
 
 async function start(){
   try{S.info=await call("")}catch(e){$("#root").innerHTML=`<div class="card state"><h1>Link not found</h1><p class="muted">Check that you copied the whole link.</p></div>`;return}
-  $("#subj").textContent=S.info.subject;
+  $("#msg").textContent=S.info.subject;
   if(S.info.sandbox)$("#ribbon").innerHTML=`<div class="ribbon">Sandbox: this is a test document and is not legally binding.</div>`;
   if(S.info.state!=="ready")return endState(S.info.state);
-  $("#root").innerHTML=`<div class="card"><h1>${esc(S.info.subject)}</h1><p class="muted">Hi ${esc(S.info.recipient.name)}, you have been asked to review and sign this document.</p>${S.info.message?`<p style="white-space:pre-wrap;background:var(--mute-bg);padding:12px;border-radius:10px">${esc(S.info.message)}</p>`:""}
-  <label class="chk"><input type="checkbox" id="consent"><span>I agree to use electronic records and signatures, and I have read the document I am about to sign. I can decline instead.</span></label>
-  <button class="btn primary" id="go" disabled>Review and sign</button> <button class="btn link" id="dec0">Decline</button></div>`;
+  $("#root").innerHTML=`<div class="card" style="max-width:600px;margin:6vh auto"><h1>Please review and act on these documents</h1><p class="muted">${esc(S.info.recipient.name)}, you have been asked to review and sign <b>${esc(S.info.subject)}</b>.</p>${S.info.message?`<p style="white-space:pre-wrap;background:var(--mute-bg);padding:12px;border-radius:8px">${esc(S.info.message)}</p>`:""}
+  <label class="chk"><input type="checkbox" id="consent"><span>I agree to use electronic records and signatures.</span></label>
+  <details><summary>Electronic record and signature disclosure</summary><p>You may sign electronically instead of on paper. You can ask the sender for a paper copy, withdraw your consent before signing, or decline to sign. Your signature, the time, and your IP address are recorded in the certificate of completion. To read the document you need a current web browser and a PDF-capable device.</p></details>
+  <button class="btn y" id="go" disabled>CONTINUE</button> <button class="btn link" id="dec0">Decline</button></div>`;
   $("#consent").onchange=e=>$("#go").disabled=!e.target.checked;
-  $("#go").onclick=()=>{S.consent=true;sign()};$("#dec0").onclick=declineModal;
+  $("#go").onclick=()=>sign();$("#dec0").onclick=declineModal;
 }
 
 /* ---------- signing ---------- */
-const FLD={signature:"Sign",initials:"Initial",date:"Date",text:"Text",checkbox:""};
 async function sign(){
-  $("#root").innerHTML=`<div class="card" style="padding:12px 18px"><b>${esc(S.info.subject)}</b><div class="muted" style="font-size:13px">Click each highlighted field. Required fields pulse.</div></div><div class="pdfwrap" id="pdf"><div class="muted">Loading document…</div></div>`;
+  $("#hright").innerHTML=`<span style="display:flex;gap:10px;align-items:center"><span id="left" class="muted" style="color:#cfc9ee;font-size:13px"></span><span class="menuwrap"><button class="oa" id="oa">Other actions ▾</button><div class="menu" id="oam" hidden><button id="mchg">Change signature style</button><button id="mdl">Download original PDF</button><button id="mdec">Decline to sign</button></div></span><button class="fin" id="fin" disabled>FINISH</button></span>`;
+  $("#msg").textContent="Please review and act on these documents";
+  $("#root").innerHTML=`<div class="pdfwrap" id="pdf"><div class="muted">Loading document…</div></div>`;
+  $("#oa").onclick=e=>{e.stopPropagation();$("#oam").hidden=!$("#oam").hidden};document.onclick=()=>{const m=$("#oam");if(m)m.hidden=true};
+  $("#mdec").onclick=declineModal;$("#mdl").onclick=()=>{location.href=A("/document")};$("#mchg").onclick=()=>adoptModal(()=>{});
+  $("#fin").onclick=finish;
   const buf=await (await fetch(A("/document"))).arrayBuffer();
   pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise,host=$("#pdf");host.innerHTML="";
   for(let n=1;n<=pdf.numPages;n++){
-    const p=await pdf.getPage(n),W=Math.min(800,host.clientWidth||800),v0=p.getViewport({scale:1}),sc=W/v0.width,vp=p.getViewport({scale:sc*(devicePixelRatio||1)});
+    const p=await pdf.getPage(n),W=Math.min(820,host.clientWidth||820),v0=p.getViewport({scale:1}),sc=W/v0.width,vp=p.getViewport({scale:sc*(devicePixelRatio||1)});
     const w=document.createElement("div");w.className="pg";w.style.width=W+"px";w.style.height=v0.height*sc+"px";w.dataset.page=n;
     const c=document.createElement("canvas");c.width=vp.width;c.height=vp.height;c.style.cssText="width:100%;height:100%";w.appendChild(c);host.appendChild(w);
     await p.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;
     S.info.fields.filter(f=>f.page===n).forEach(f=>w.appendChild(fieldEl(f)));
   }
-  bar();update();
+  update();
 }
 function fieldEl(f){
-  const d=document.createElement("div");d.className="fld";d.id="f_"+f.id;d.style.cssText=`left:${f.x*100}%;top:${f.y*100}%;width:${f.w*100}%;height:${f.h*100}%`;
+  const d=document.createElement("div");d.id="f_"+f.id;d.style.cssText=`left:${f.x*100}%;top:${f.y*100}%;width:${f.w*100}%;height:${f.h*100}%`;
   d.onclick=()=>fieldClick(f);return d;
 }
 function fieldClick(f){
-  if(f.type==="signature"||f.type==="initials"){adoptModal(f.type,url=>{S.adopted[f.type]=url;S.vals[f.id]=url;update()});}
-  else if(f.type==="checkbox"){S.vals[f.id]=!S.vals[f.id];update()}
+  if(f.type==="signature"||f.type==="initials"){
+    if(S.adopted){S.vals[f.id]=S.adopted[f.type];S.started=true;update()}
+    else adoptModal(()=>{S.vals[f.id]=S.adopted[f.type];S.started=true;update()});
+  }else if(f.type==="checkbox"){S.vals[f.id]=!S.vals[f.id];S.started=true;update()}
 }
+const fixedText=f=>f.type==="date"?new Date().toISOString().slice(0,10):f.type==="name"?S.info.recipient.name:S.info.recipient.email;
+const isFilled=f=>FIXED.includes(f.type)||(S.vals[f.id]&&String(S.vals[f.id]).trim());
 function update(){
-  let left=0;const today=new Date().toISOString().slice(0,10);
   S.info.fields.forEach(f=>{
     const d=$("#f_"+f.id);if(!d)return;const v=S.vals[f.id];let html="",cls="fld";
-    if(f.type==="signature"||f.type==="initials")html=v?`<img alt="${f.type}" src="${v}">`:FLD[f.type];
-    else if(f.type==="date"){cls+=" fixed";html=today}
+    if(FIXED.includes(f.type)){cls+=" fixed";html=esc(fixedText(f))}
+    else if(f.type==="signature"||f.type==="initials")html=v?`<img alt="${f.type}" src="${v}">`:`<span>${f.type==="signature"?"✍ Sign":"Initial"}</span>${f.required?'<span class="req">Required</span>':""}`;
     else if(f.type==="checkbox")html=`<input type="checkbox" ${v?"checked":""} aria-label="checkbox">`;
-    else html=`<input type="text" maxlength="500" value="${esc(v||"")}" aria-label="${esc(f.label||"text")}" placeholder="${esc(f.label||"Type here")}">`;
-    const filled=f.type==="date"||!!v;
-    if(f.required&&!filled)left++;
-    if(!cls.includes("fixed"))cls+=filled?" done":(f.required?" todo":" opt");
+    else html=`<input type="text" maxlength="500" value="${esc(v||"")}" aria-label="${esc(f.label||"text")}" placeholder="${esc(f.label||"Text")}">`;
+    if(!cls.includes("fixed"))cls+=isFilled(f)?" done":(f.required?" todo":" opt");
     d.className=cls;
-    if(f.type==="text"){if(!d.querySelector("input")){d.innerHTML=html;const i=d.querySelector("input");i.oninput=()=>{S.vals[f.id]=i.value;refresh()};i.onclick=e=>e.stopPropagation()}}
-    else{d.innerHTML=html;if(f.type==="checkbox"){const i=d.querySelector("input");i.onclick=e=>{e.stopPropagation();S.vals[f.id]=i.checked;update()}}}
+    if(f.type==="text"){if(!d.querySelector("input")){d.innerHTML=html;const i=d.querySelector("input");i.oninput=()=>{S.vals[f.id]=i.value;S.started=true;refresh()};i.onclick=e=>e.stopPropagation()}}
+    else{d.innerHTML=html;if(f.type==="checkbox"){const i=d.querySelector("input");i.onclick=e=>{e.stopPropagation();S.vals[f.id]=i.checked;S.started=true;update()}}}
   });
-  S.left=left;refresh();
+  refresh();
 }
+const todo=()=>S.info.fields.filter(f=>f.required&&!isFilled(f));
 function refresh(){
-  let left=0;S.info.fields.forEach(f=>{if(f.required&&f.type!=="date"&&!(S.vals[f.id]&&String(S.vals[f.id]).trim()))left++});
-  S.left=left;const b=$("#fin");if(b)b.disabled=left>0;const t=$("#left");if(t)t.textContent=left?`${left} required field${left>1?"s":""} left`:"Ready to finish";
+  const t=todo(),b=$("#fin");if(b)b.disabled=t.length>0;const l=$("#left");if(l)l.textContent=t.length?`${t.length} required left`:"Ready to finish";
+  document.querySelectorAll(".flag").forEach(x=>x.remove());
+  const nxt=t[0];if(!nxt)return;
+  const d=$("#f_"+nxt.id);if(!d)return;const pg=d.parentElement,fl=document.createElement("div");fl.className="flag";fl.textContent=S.started?"Next":"Start";
+  fl.style.cssText=`left:max(0px,calc(${nxt.x*100}% - 66px));top:calc(${nxt.y*100}% + ${nxt.h*50}% - 12px)`;
+  fl.onclick=()=>{d.scrollIntoView({behavior:"smooth",block:"center"});if(nxt.type==="text")d.querySelector("input")?.focus();else d.click()};pg.appendChild(fl);
 }
-function bar(){
-  const el=document.createElement("div");el.className="bar";el.innerHTML=`<div class="l"><b id="left"></b><button class="btn" id="nxt">Next field</button></div><div class="l"><button class="btn link" id="dec">Decline</button><button class="btn primary" id="fin" disabled>Finish</button></div>`;document.body.appendChild(el);
-  $("#nxt").onclick=()=>{const f=S.info.fields.find(f=>f.required&&f.type!=="date"&&!(S.vals[f.id]&&String(S.vals[f.id]).trim()));if(f){const d=$("#f_"+f.id);d.scrollIntoView({behavior:"smooth",block:"center"});if(f.type==="text")d.querySelector("input")?.focus()}};
-  $("#dec").onclick=declineModal;
-  $("#fin").onclick=async()=>{$("#fin").disabled=true;try{const r=await call("/complete",{consent:true,values:S.vals});endState(r.state==="completed"?"completed":"signed")}catch(e){$("#fin").disabled=false;alert2(e.message)}};
-}
-function alert2(msg){let el=$("#oops");if(!el){el=document.createElement("div");el.id="oops";el.className="err";el.style.cssText="position:fixed;left:16px;right:16px;bottom:84px;z-index:60;max-width:560px;margin:0 auto";document.body.appendChild(el)}el.textContent=msg;setTimeout(()=>el.remove(),6000)}
+async function finish(){const b=$("#fin");b.disabled=true;try{const r=await call("/complete",{consent:true,values:S.vals});endState(r.state==="completed"?"completed":"signed")}catch(e){b.disabled=false;oops(e.message)}}
+function oops(msg){let el=$("#oops");if(!el){el=document.createElement("div");el.id="oops";el.className="err";el.style.cssText="position:fixed;left:16px;right:16px;top:70px;z-index:70;max-width:560px;margin:0 auto";document.body.appendChild(el)}el.textContent=msg;setTimeout(()=>el.remove(),6000)}
 
-/* ---------- adopt signature ---------- */
-function adoptModal(kind,done){
-  const init=kind==="initials",W=init?240:600,H=200,name=S.info.recipient.name,txt=init?name.split(/\s+/).map(w=>w[0]||"").join("").toUpperCase().slice(0,4):name;
-  let mode="type",drawn=false;
-  $("#overlay").innerHTML=`<div class="modal"><div class="box"><h1>${init?"Adopt your initials":"Adopt your signature"}</h1><div class="tabs"><button data-m="type" class="on">Type</button><button data-m="draw">Draw</button></div>
-  <div id="pane"></div><p class="muted" style="font-size:12.5px">By selecting Adopt, you agree this is a legal representation of your ${init?"initials":"signature"}.</p>
-  <div style="display:flex;gap:10px;justify-content:flex-end"><button class="btn" id="cx">Cancel</button><button class="btn primary" id="ok">Adopt</button></div></div></div>`;
-  const out=document.createElement("canvas");out.width=W;out.height=H;
-  const typed=()=>{const x=out.getContext("2d");x.clearRect(0,0,W,H);const v=($("#tv")?.value||"").trim();if(!v)return null;let px=130;x.fillStyle="#0b1f66";x.textBaseline="middle";x.textAlign="center";
-    do{x.font=`600 ${px}px "Dancing Script",cursive`;px-=4}while(x.measureText(v).width>W-30&&px>20);x.fillText(v,W/2,H/2);return out.toDataURL("image/png")};
+/* ---------- adopt your signature ---------- */
+function typedPng(text,font,W,H){
+  const c=document.createElement("canvas");c.width=W;c.height=H;const x=c.getContext("2d");x.clearRect(0,0,W,H);if(!text)return null;
+  let px=Math.round(H*.66);x.fillStyle="#0b1f66";x.textBaseline="middle";x.textAlign="center";
+  do{x.font=`${px}px "${font}",cursive`;px-=4}while(x.measureText(text).width>W-24&&px>16);
+  x.fillText(text,W/2,H/2);return c.toDataURL("image/png");
+}
+function adoptModal(done){
+  const nm=S.info.recipient.name,ini=nm.split(/\s+/).map(w=>w[0]||"").join("").toUpperCase().slice(0,4);
+  let style=S.adopted?.style||FONTS[0][0],tab="style",drawn={sig:false,ini:false};
+  $("#overlay").innerHTML=`<div class="modalbg"><div class="box"><h1>Adopt Your Signature</h1><p class="muted">Confirm your name, initials, and signature.</p>
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-top:10px"><label class="f">Full name *<input type="text" id="an" maxlength="60" value="${esc(S.adopted?.name||nm)}"></label><label class="f">Initials *<input type="text" id="ai" maxlength="4" value="${esc(S.adopted?.inits||ini)}"></label></div>
+  <div class="tabs"><button data-t="style" class="on">Select style</button><button data-t="draw">Draw</button></div><div id="pane"></div>
+  <p class="muted" style="font-size:12.5px;margin-top:12px">By selecting Adopt and Sign, I agree that the signature and initials will be the electronic representation of my signature and initials for all purposes when I use them on documents, including legally binding contracts.</p>
+  <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button class="btn" id="cx">CANCEL</button><button class="btn y" id="ok">ADOPT AND SIGN</button></div></div></div>`;
+  const val=id=>$(id).value.trim();
   const pane=()=>{
-    if(mode==="type"){$("#pane").innerHTML=`<input type="text" id="tv" maxlength="60" value="${esc(txt)}" aria-label="Your ${init?"initials":"name"}"><div class="prev" style="margin-top:10px"><img id="pv" alt="preview"></div>`;
-      const pv=()=>{const u=typed();$("#pv").src=u||"";};$("#tv").oninput=pv;(document.fonts?document.fonts.load('600 40px "Dancing Script"').catch(()=>{}):Promise.resolve()).then(pv)}
-    else{$("#pane").innerHTML=`<canvas class="draw" id="dc" width="${W}" height="${H}"></canvas><button class="btn link" id="clr">Clear</button>`;
-      const c=$("#dc"),x=c.getContext("2d");x.lineWidth=init?6:5;x.lineCap=x.lineJoin="round";x.strokeStyle="#0b1f66";let down=false;drawn=false;
-      const pt=e=>{const r=c.getBoundingClientRect();return[(e.clientX-r.left)*W/r.width,(e.clientY-r.top)*H/r.height]};
-      c.onpointerdown=e=>{down=true;c.setPointerCapture(e.pointerId);const[a,b]=pt(e);x.beginPath();x.moveTo(a,b);x.lineTo(a+.1,b+.1);x.stroke();drawn=true};
-      c.onpointermove=e=>{if(!down)return;const[a,b]=pt(e);x.lineTo(a,b);x.stroke()};c.onpointerup=()=>down=false;
-      $("#clr").onclick=()=>{x.clearRect(0,0,W,H);drawn=false}}
+    if(tab==="style"){$("#pane").innerHTML=`<div class="styles">${FONTS.map(([k,f])=>`<div class="sty ${k===style?"on":""}" data-s="${k}" role="radio" aria-checked="${k===style}"><input type="radio" name="sty" ${k===style?"checked":""} aria-label="${k}"><div><span class="by">SIGNED BY</span><span class="sg" style="font-family:'${f}',cursive">${esc(val("#an")||nm)}</span></div><div class="in" style="font-family:'${f}',cursive">${esc(val("#ai")||ini)}</div></div>`).join("")}</div>`;
+      document.querySelectorAll(".sty").forEach(e=>e.onclick=()=>{style=e.dataset.s;pane()})}
+    else{$("#pane").innerHTML=`<label class="f">Draw your signature<canvas class="draw" id="d1" width="600" height="200"></canvas></label><label class="f" style="margin-top:8px">Draw your initials<canvas class="draw" id="d2" width="240" height="200" style="aspect-ratio:6/5;max-width:220px"></canvas></label><button class="btn link" id="clr">Clear</button>`;
+      [["#d1","sig"],["#d2","ini"]].forEach(([id,k])=>{const c=$(id),x=c.getContext("2d"),W=c.width,H=c.height;x.lineWidth=5;x.lineCap=x.lineJoin="round";x.strokeStyle="#0b1f66";let down=false;
+        const pt=e=>{const r=c.getBoundingClientRect();return[(e.clientX-r.left)*W/r.width,(e.clientY-r.top)*H/r.height]};
+        c.onpointerdown=e=>{down=true;c.setPointerCapture?.(e.pointerId);const[a,b]=pt(e);x.beginPath();x.moveTo(a,b);x.lineTo(a+.1,b+.1);x.stroke();drawn[k]=true};
+        c.onpointermove=e=>{if(!down)return;const[a,b]=pt(e);x.lineTo(a,b);x.stroke()};c.onpointerup=()=>down=false});
+      $("#clr").onclick=()=>{["#d1","#d2"].forEach(id=>{const c=$(id);c.getContext("2d").clearRect(0,0,c.width,c.height)});drawn={sig:false,ini:false};}}
   };
-  document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{mode=b.dataset.m;document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x===b));pane()});
+  document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x===b));pane()});
+  $("#an").oninput=$("#ai").oninput=()=>{if(tab==="style")pane()};
   pane();$("#cx").onclick=()=>$("#overlay").innerHTML="";
-  $("#ok").onclick=()=>{const u=mode==="type"?typed():(drawn?$("#dc").toDataURL("image/png"):null);if(!u)return;$("#overlay").innerHTML="";done(u)};
+  $("#ok").onclick=async()=>{
+    const name=val("#an"),inits=val("#ai");let sig,ini;
+    if(tab==="draw"&&drawn.sig&&drawn.ini){sig=$("#d1").toDataURL("image/png");ini=$("#d2").toDataURL("image/png")}
+    else{if(!name||!inits)return;try{await document.fonts?.load(`40px "${style}"`)}catch{}sig=typedPng(name,style,600,200);ini=typedPng(inits,style,240,200)}
+    if(!sig||!ini)return;
+    S.adopted={signature:sig,initials:ini,style,name,inits};
+    S.info.fields.forEach(f=>{if((f.type==="signature"||f.type==="initials")&&S.vals[f.id])S.vals[f.id]=S.adopted[f.type]});
+    $("#overlay").innerHTML="";done();update();
+  };
 }
 function declineModal(){
-  $("#overlay").innerHTML=`<div class="modal"><div class="box"><h1>Decline to sign</h1><p class="muted">The sender will be told, and nobody will be able to sign this document.</p><textarea id="why" rows="3" maxlength="300" placeholder="Reason (optional)"></textarea><div id="de"></div><div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button class="btn" id="cx">Back</button><button class="btn primary" id="dok">Decline</button></div></div></div>`;
+  $("#overlay").innerHTML=`<div class="modalbg"><div class="box"><h1>Decline to sign</h1><p class="muted">The sender will be told, and nobody will be able to sign this document.</p><textarea id="why" rows="3" maxlength="300" placeholder="Reason (optional)"></textarea><div id="de"></div><div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button class="btn" id="cx">BACK</button><button class="btn y" id="dok">DECLINE</button></div></div></div>`;
   $("#cx").onclick=()=>$("#overlay").innerHTML="";
   $("#dok").onclick=async()=>{try{await call("/decline",{reason:$("#why").value});endState("declined")}catch(e){$("#de").innerHTML=`<div class="err">${esc(e.message)}</div>`}};
 }

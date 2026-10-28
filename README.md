@@ -12,12 +12,13 @@ completion. Everything the web app does is available over a documented REST API 
 | Area | Capability |
 |---|---|
 | Sending | PDF upload, recipients (signer / gets a copy), routing order, sequential or parallel signing, subject and message, metadata echoed in webhooks |
-| Fields | Signature, initials, date signed (server-stamped), text, checkbox. Positioned as fractions of the page so they survive any page size |
-| Signing | Mobile-friendly signing page: consent step, type or draw a signature, required-field guidance, decline with reason |
+| Fields | Signature, initials, date signed, name, email (all server-filled, never client-supplied), text, checkbox. Positioned as fractions of the page so they survive any page size. Drag from a palette onto the page, or click to place |
+| Templates | Save a document with its roles and fields, then send it to real people in two clicks or one API call |
+| Signing | Mobile-friendly signing page: consent step, Start/Next guidance tags, "Adopt Your Signature" with four script styles or freehand drawing, Finish bar, decline with reason, change signature style |
 | Output | Signed PDF with every field stamped plus a **certificate of completion** (parties, IPs, timestamps, full audit trail, SHA-256 of the original) |
 | Lifecycle | draft → sent → completed, or declined / voided. Drafts can be deleted, sent envelopes voided |
 | Audit | Append-only event log per envelope: created, sent, viewed, consent, signed, declined, voided, completed |
-| Dashboard | Envelope list with filters, detail with activity timeline and signing links, guided composer with an in-page PDF field editor |
+| Dashboard | Home with status tiles, Agreements with folders, search and bulk void/delete, detail page with progress tracker, history, signing links and document preview, four-stage composer (documents, recipients, fields, review), Templates |
 
 ### Developer tools
 

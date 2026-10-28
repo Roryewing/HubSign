@@ -266,3 +266,64 @@ def test_sdk_roundtrip_and_signature_verification(env, tmp_path):
                    (sign_webhook("sec", body, int(time.time()) - 4000), body)]:  # fmt: skip
         with pytest.raises(ValueError):
             verify_signature("sec", hdr, b)
+
+
+def test_templates_counts_search_and_prefilled_fields(env):
+    import base64
+
+    from .conftest import make_pdf
+
+    h = env.h
+    body = {
+        "name": "Lease", "description": "Standard lease", "document_base64": base64.b64encode(make_pdf()).decode(),
+        "roles": [{"name": "Tenant", "routing_order": 1}, {"name": "Landlord", "routing_order": 2}],
+        "fields": [
+            {"recipient": 0, "type": "signature", "page": 1, "x": 0.1, "y": 0.8},
+            {"recipient": 0, "type": "name", "page": 1, "x": 0.1, "y": 0.7},
+            {"recipient": 0, "type": "email", "page": 1, "x": 0.5, "y": 0.7},
+            {"recipient": 1, "type": "signature", "page": 2, "x": 0.1, "y": 0.8},
+        ],
+    }  # fmt: skip
+    t = env.client.post("/v1/templates", json=body, headers=h)
+    assert t.status_code == 201, t.text
+    t = t.json()
+    assert [x["id"] for x in env.client.get("/v1/templates", headers=h).json()["templates"]] == [t["id"]]
+    assert (
+        env.client.post(
+            f"/v1/templates/{t['id']}/envelopes", json={"recipients": [{"name": "A", "email": "a@x.co"}]}, headers=h
+        ).status_code
+        == 422
+    )
+    e = env.client.post(
+        f"/v1/templates/{t['id']}/envelopes", headers=h,
+        json={"recipients": [{"name": "Tina Tenant", "email": "tina@example.com"}, {"name": "Lou Lord", "email": "lou@example.com"}], "send": True},
+    )  # fmt: skip
+    assert e.status_code == 201 and e.json()["subject"] == "Lease" and e.json()["status"] == "sent"
+    e = e.json()
+    tok = token(e["recipients"][0]["signing_url"])
+    info, vals = fill(env, tok)
+    assert (
+        env.client.post(
+            f"/sign-api/{tok}/complete",
+            json={
+                "consent": True,
+                "values": {**vals, **{f["id"]: "forged" for f in info["fields"] if f["type"] in ("name", "email")}},
+            },
+        ).json()["state"]
+        == "signed"
+    )
+    stored = env.client.app.state.svc.db.q(
+        "SELECT type,value FROM fields WHERE recipient_id=? AND type IN ('name','email')", (e["recipients"][0]["id"],)
+    )
+    assert {r["type"]: r["value"] for r in stored} == {
+        "name": "Tina Tenant",
+        "email": "tina@example.com",
+    }  # forged values ignored
+    # counts + search + cross-user isolation of templates
+    c = env.client.get("/v1/envelopes/counts", headers=h).json()
+    assert c["sent"] == 1 and c["all"] == 1 and c["completed"] == 0
+    assert len(env.client.get("/v1/envelopes?q=tina", headers=h).json()["envelopes"]) == 1
+    assert env.client.get("/v1/envelopes?q=nobody", headers=h).json()["envelopes"] == []
+    assert env.client.get("/v1/envelopes?q=%25", headers=h).json()["envelopes"] == []  # wildcard is not a match-all
+    assert env.client.delete(f"/v1/templates/{t['id']}", headers=h).status_code == 204
+    assert env.client.get(f"/v1/templates/{t['id']}", headers=h).status_code == 404
