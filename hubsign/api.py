@@ -27,7 +27,7 @@ from .core import DEFAULT_SIZE, Error, Service, now, rid
 from .db import Database
 from .identity import Identity
 from .seal import Sealer
-from .storage import make_storage
+from .storage import LocalStorage, make_storage
 from .webhooks import EVENTS, Webhooks
 
 log = logging.getLogger("hubsign")
@@ -284,7 +284,15 @@ def create_app(
     hooks = Webhooks(db, s, **({"sender": sender} if sender else {}))
     ident = Identity(s, db, **({"sms_sender": sms_sender} if sms_sender else {}))
     storage = make_storage(s, db)
-    svc = Service(s, db, hooks, storage, ident, Sealer(s, timestamper=timestamper))
+
+    svc = Service(
+        s,
+        db,
+        hooks,
+        storage,
+        ident,
+        Sealer(s, timestamper=timestamper, store=None if isinstance(storage, LocalStorage) else storage),
+    )
     https = s.base_url.startswith("https")
     if https and s.trust_proxy_hops == 0:
         log.warning(
