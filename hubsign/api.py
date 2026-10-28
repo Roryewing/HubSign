@@ -8,6 +8,7 @@ import json
 import secrets
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -42,7 +43,7 @@ class RecipientIn(BaseModel):
 
 class FieldIn(BaseModel):
     recipient: int = Field(ge=0, description="Index into `recipients`")
-    type: Literal["signature", "initials", "date", "text", "checkbox"]
+    type: Literal["signature", "initials", "date", "name", "email", "text", "checkbox"]
     page: int = Field(ge=1)
     x: float = Field(ge=0, le=1, description="Left edge, fraction of page width")
     y: float = Field(ge=0, le=1, description="Top edge, fraction of page height")
@@ -62,6 +63,35 @@ class EnvelopeIn(BaseModel):
     sequential: bool = Field(default=True, description="Signers sign in routing_order; false = all at once")
     send: bool = Field(default=False, description="Send immediately instead of leaving a draft")
     metadata: dict[str, str] = Field(default_factory=dict, description="Your own references, echoed in webhooks")
+
+
+class RoleIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100, description="Role label, e.g. Tenant")
+    role: Literal["signer", "cc"] = "signer"
+    routing_order: int = Field(default=1, ge=1, le=20)
+
+
+class TemplateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=500)
+    document_base64: str
+    document_name: str = Field(default="document.pdf", max_length=200)
+    roles: list[RoleIn] = Field(min_length=1)
+    fields: list[FieldIn] = []
+    sequential: bool = True
+
+
+class PersonIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    email: str = Field(pattern=EMAIL, max_length=200)
+
+
+class UseTemplateIn(BaseModel):
+    recipients: list[PersonIn] = Field(min_length=1, description="One person per template role, in role order")
+    subject: str = Field(default="", max_length=200)
+    message: str = Field(default="", max_length=2000)
+    send: bool = False
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class VoidIn(BaseModel):
@@ -218,15 +248,36 @@ def create_app(settings: Settings | None = None, sender=None) -> FastAPI:
         return svc.detail(eid, c.user["id"], c.mode)
 
     @app.get("/v1/envelopes", tags=["envelopes"])
-    def list_envelopes(status: str | None = None, limit: int = 50, offset: int = 0, c: Ctx = Depends(ctx)):
+    def list_envelopes(
+        status: str | None = None, q: str | None = None, limit: int = 50, offset: int = 0, c: Ctx = Depends(ctx)
+    ):
         sql, args = "SELECT id FROM envelopes WHERE user_id=? AND mode=?", [c.user["id"], c.mode]
         if status:
             sql, args = sql + " AND status=?", [*args, status]
+        if q:
+            like = "%" + q[:100].replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            sql += " AND (subject LIKE ? ESCAPE '\\' OR id IN (SELECT envelope_id FROM recipients WHERE name LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\'))"
+            args += [like, like, like]
         rows = db.q(
-            sql + " ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?",
+            sql + " ORDER BY updated_at DESC, rowid DESC LIMIT ? OFFSET ?",
             (*args, min(max(limit, 1), 200), max(offset, 0)),
         )
         return {"envelopes": [svc.summary(r["id"]) | {"updated_at": svc.env(r["id"])["updated_at"]} for r in rows]}
+
+    @app.get("/v1/envelopes/counts", tags=["envelopes"])
+    def envelope_counts(c: Ctx = Depends(ctx)):
+        out = {k: 0 for k in ("draft", "sent", "completed", "declined", "voided")}
+        for r in db.q(
+            "SELECT status, COUNT(*) AS n FROM envelopes WHERE user_id=? AND mode=? GROUP BY status",
+            (c.user["id"], c.mode),
+        ):
+            out[r["status"]] = r["n"]
+        month_ago = (datetime.now(UTC) - timedelta(days=30)).isoformat()
+        done = db.one(
+            "SELECT COUNT(*) AS n FROM envelopes WHERE user_id=? AND mode=? AND status='completed' AND completed_at>=?",
+            (c.user["id"], c.mode, month_ago),
+        )
+        return out | {"all": sum(out.values()), "completed_30d": done["n"]}
 
     @app.get("/v1/envelopes/{eid}", tags=["envelopes"])
     def get_envelope(eid: str, c: Ctx = Depends(ctx)):
@@ -260,6 +311,58 @@ def create_app(settings: Settings | None = None, sender=None) -> FastAPI:
     def signed_document(eid: str, c: Ctx = Depends(ctx)):
         svc.env(eid, c.user["id"], c.mode)
         return FileResponse(svc.file_for(eid, True), media_type="application/pdf", filename=f"{eid}-signed.pdf")
+
+    # ---- templates ---------------------------------------------------------------------------------------------------
+    def tpl_out(t: dict) -> dict:
+        return {
+            k: t[k]
+            for k in ("id", "name", "description", "doc_name", "pages", "roles", "fields", "sequential", "created_at")
+        }
+
+    @app.post("/v1/templates", status_code=201, tags=["templates"])
+    def create_template(b: TemplateIn, c: Ctx = Depends(ctx)):
+        try:
+            doc = base64.b64decode(b.document_base64, validate=True)
+        except (binascii.Error, ValueError):
+            raise HTTPException(422, "document_base64 is not valid base64") from None
+        fields = []
+        for f in b.fields:
+            dw, dh = DEFAULT_SIZE[f.type]
+            fields.append({**f.model_dump(), "w": f.w or dw, "h": f.h or dh})
+        tid = svc.create_template(
+            c.user["id"], c.mode, name=b.name, description=b.description, doc=doc, doc_name=b.document_name,
+            roles=[r.model_dump() for r in b.roles], fields=fields, sequential=b.sequential,
+        )  # fmt: skip
+        return tpl_out(svc.template(tid, c.user["id"], c.mode))
+
+    @app.get("/v1/templates", tags=["templates"])
+    def list_templates(c: Ctx = Depends(ctx)):
+        rows = db.q(
+            "SELECT id FROM templates WHERE user_id=? AND mode=? ORDER BY created_at DESC, rowid DESC",
+            (c.user["id"], c.mode),
+        )
+        return {"templates": [tpl_out(svc.template(r["id"], c.user["id"], c.mode)) for r in rows]}
+
+    @app.get("/v1/templates/{tid}", tags=["templates"])
+    def get_template(tid: str, c: Ctx = Depends(ctx)):
+        return tpl_out(svc.template(tid, c.user["id"], c.mode))
+
+    @app.get("/v1/templates/{tid}/document", tags=["templates"])
+    def template_document(tid: str, c: Ctx = Depends(ctx)):
+        t = svc.template(tid, c.user["id"], c.mode)
+        return FileResponse(svc.file_for(tid, False), media_type="application/pdf", filename=t["doc_name"])
+
+    @app.delete("/v1/templates/{tid}", status_code=204, tags=["templates"])
+    def delete_template(tid: str, c: Ctx = Depends(ctx)):
+        svc.delete_template(tid, c.user["id"], c.mode)
+
+    @app.post("/v1/templates/{tid}/envelopes", status_code=201, tags=["templates"])
+    def envelope_from_template(tid: str, b: UseTemplateIn, c: Ctx = Depends(ctx)):
+        eid = svc.use_template(
+            tid, c.user["id"], c.mode, people=[p.model_dump() for p in b.recipients], subject=b.subject,
+            message=b.message, metadata=b.metadata, send=b.send,
+        )  # fmt: skip
+        return svc.detail(eid, c.user["id"], c.mode)
 
     # ---- developer tools: keys ------------------------------------------------------------------------------------
     @app.post("/v1/api-keys", status_code=201, tags=["developer"])

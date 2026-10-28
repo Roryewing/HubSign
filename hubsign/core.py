@@ -15,11 +15,13 @@ from .config import Settings
 from .db import Database
 from .webhooks import Webhooks
 
-FIELD_TYPES = {"signature", "initials", "date", "text", "checkbox"}
+FIELD_TYPES = {"signature", "initials", "date", "name", "email", "text", "checkbox"}
 DEFAULT_SIZE = {
     "signature": (0.25, 0.06),
     "initials": (0.08, 0.05),
     "date": (0.15, 0.03),
+    "name": (0.22, 0.03),
+    "email": (0.28, 0.03),
     "text": (0.25, 0.03),
     "checkbox": (0.025, 0.02),
 }
@@ -119,18 +121,12 @@ class Service:
             data["recipient"] = {k: recipient[k] for k in ("id", "name", "email", "status")}
         self.hooks.emit(e["user_id"], e["mode"], event, data)
 
-    # ---- create / send --------------------------------------------------------------------------------------------
-    def create(
-        self, uid, mode, *, subject, message, doc: bytes, doc_name, recipients, fields, sequential, metadata
-    ) -> str:
-        if len(doc) > self.s.max_doc_mb * 1024 * 1024:
-            raise Error(413, f"document exceeds {self.s.max_doc_mb} MB")
+    def _check(self, doc: bytes, recipients: list[dict], fields: list[dict]) -> int:
         try:
             pages = pdfs.inspect(doc)
         except ValueError as e:
             raise Error(422, str(e)) from e
-        emails = [r["email"].lower() for r in recipients if r["role"] == "signer"]
-        if not emails:
+        if not any(r["role"] == "signer" for r in recipients):
             raise Error(422, "at least one signer is required")
         if len(recipients) > 20 or len(fields) > 500:
             raise Error(422, "too many recipients or fields")
@@ -151,6 +147,15 @@ class Service:
                 and f["y"] + f["h"] <= 1.001
             ):
                 raise Error(422, "field box must lie inside the page (fractions 0..1)")
+        return pages
+
+    # ---- create / send --------------------------------------------------------------------------------------------
+    def create(
+        self, uid, mode, *, subject, message, doc: bytes, doc_name, recipients, fields, sequential, metadata
+    ) -> str:
+        if len(doc) > self.s.max_doc_mb * 1024 * 1024:
+            raise Error(413, f"document exceeds {self.s.max_doc_mb} MB")
+        pages = self._check(doc, recipients, fields)
         eid = rid("env")
         (self.docs / f"{eid}.pdf").write_bytes(doc)
         t = now()
@@ -183,6 +188,62 @@ class Service:
                  int(f["required"]), f["label"]),
             )  # fmt: skip
         self._event(eid, "created", "api")
+        return eid
+
+    # ---- templates -----------------------------------------------------------------------------------------------
+    def create_template(self, uid, mode, *, name, description, doc: bytes, doc_name, roles, fields, sequential) -> str:
+        if len(doc) > self.s.max_doc_mb * 1024 * 1024:
+            raise Error(413, f"document exceeds {self.s.max_doc_mb} MB")
+        pages = self._check(doc, roles, fields)
+        tid = rid("tpl")
+        (self.docs / f"{tid}.pdf").write_bytes(doc)
+        self.db.x(
+            "INSERT INTO templates VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                tid,
+                uid,
+                mode,
+                name,
+                description,
+                doc_name,
+                pages,
+                json.dumps(roles),
+                json.dumps(fields),
+                int(sequential),
+                now(),
+            ),
+        )
+        return tid
+
+    def template(self, tid: str, uid: str, mode: str) -> dict:
+        t = self.db.one("SELECT * FROM templates WHERE id=? AND user_id=? AND mode=?", (tid, uid, mode))
+        if not t:
+            raise Error(404, "template not found")
+        return t | {
+            "roles": json.loads(t["roles"]),
+            "fields": json.loads(t["fields"]),
+            "sequential": bool(t["sequential"]),
+        }
+
+    def delete_template(self, tid: str, uid: str, mode: str) -> None:
+        self.template(tid, uid, mode)
+        self.db.x("DELETE FROM templates WHERE id=?", (tid,))
+        (self.docs / f"{tid}.pdf").unlink(missing_ok=True)
+
+    def use_template(self, tid, uid, mode, *, people, subject, message, metadata, send) -> str:
+        t = self.template(tid, uid, mode)
+        if len(people) != len(t["roles"]):
+            raise Error(422, f"this template has {len(t['roles'])} roles; send one recipient per role")
+        recipients = [
+            {"name": p["name"], "email": p["email"], "role": r["role"], "routing_order": r["routing_order"]}
+            for r, p in zip(t["roles"], people, strict=True)
+        ]
+        eid = self.create(
+            uid, mode, subject=subject or t["name"], message=message, doc=(self.docs / f"{tid}.pdf").read_bytes(),
+            doc_name=t["doc_name"], recipients=recipients, fields=t["fields"], sequential=t["sequential"], metadata=metadata,
+        )  # fmt: skip
+        if send:
+            self.send(eid, uid, mode)
         return eid
 
     def send(self, eid: str, uid: str, mode: str) -> None:
@@ -300,6 +361,8 @@ class Service:
                 v = values.get(f["id"])
                 if f["type"] == "date":
                     v = datetime.now(UTC).date().isoformat()  # never trust a client-supplied signing date
+                elif f["type"] in ("name", "email"):
+                    v = r[f["type"]]  # taken from the recipient record, not the client
                 elif f["type"] in ("signature", "initials"):
                     if v is not None and not pdfs.png_from_data_url(str(v)):
                         raise Error(422, f"{f['type']} must be a PNG data URL")
