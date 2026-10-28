@@ -1,0 +1,37 @@
+[project]
+name = "hubsign"
+version = "0.1.0"
+description = "E-signature platform with a developer API, signed webhooks and a sandbox"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "pydantic-settings>=2.4",
+  "pypdf>=5.0",
+  "reportlab>=4.2",
+  "httpx>=0.27",
+]
+
+[project.scripts]
+hubsign = "hubsign.__main__:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hubsign"]
+
+[tool.ruff]
+line-length = 120
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501", "B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
