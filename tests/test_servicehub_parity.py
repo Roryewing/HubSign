@@ -307,14 +307,17 @@ def test_positioned_fields_still_validated(env, bad):
 
 def test_editable_prefill_is_a_default_the_signer_may_change(env):
     pdf = anchored_pdf(1, [(1, "~a~", 100, 300), (1, "~b~", 100, 200), (1, "~c~", 100, 100)])
-    f = lambda label, anchor, **kw: {
-        "recipient": 0,
-        "type": "text",
-        "label": label,
-        "required": False,
-        "anchor": {"text": anchor, "y_offset": -8},
-        **kw,
-    }  # noqa: E731
+
+    def f(label, anchor, **kw):
+        return {
+            "recipient": 0,
+            "type": "text",
+            "label": label,
+            "required": False,
+            "anchor": {"text": anchor, "y_offset": -8},
+            **kw,
+        }
+
     fields = [f("kept", "~a~", value="Default A", editable=True), f("changed", "~b~", value="Default B", editable=True), f("cleared", "~c~", value="Default C", editable=True),
               {"recipient": 0, "type": "signature", "page": 1, "x": 0.1, "y": 0.8}]  # fmt: skip
     e = env.envelope(
