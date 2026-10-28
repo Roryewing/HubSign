@@ -338,3 +338,21 @@ def test_editable_prefill_is_a_default_the_signer_may_change(env):
         "kept": "Default A",
         "changed": "Edited B",
     }
+
+
+def test_mail_through_a_relay(make_env, monkeypatch):
+    calls = []
+
+    class R:
+        status_code = 200
+        text = "ok"
+
+    monkeypatch.setattr("hubsign.mail.httpx.post", lambda url, **kw: calls.append((url, kw)) or R())
+    env = make_env(mail_relay_url="https://relay.example/hubsign-mail", mail_relay_secret="s3cret")
+    env.envelope(reply_to={"name": "Dan", "email": "dan@hjv.example"}, sender_name="HJV Equipment", send=True)
+    url, kw = calls[0]
+    assert url == "https://relay.example/hubsign-mail" and kw["headers"] == {"X-Relay-Secret": "s3cret"}
+    j = kw["json"]
+    assert j["to"] == "ann@example.com" and j["subject"].startswith("Please sign") and "/sign/" in j["html"]
+    assert j["reply_to"] == {"name": "Dan", "email": "dan@hjv.example"} and j["from_name"] == "HJV Equipment"
+    assert "sendgrid" not in url
