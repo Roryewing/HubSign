@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data")
     base_url: str = "http://localhost:8000"  # used to build signing links
     secret: str = ""  # signs session cookies and OTP hashes; generated into data_dir/secret when blank
+    first_user_email: str = ""  # when set, only this address may create the very first account
     allow_signup: bool = True  # the very first account is always allowed
     allow_private_webhooks: bool = False  # true only for local development
     webhooks_inline: bool = False  # tests: deliver synchronously, no background worker

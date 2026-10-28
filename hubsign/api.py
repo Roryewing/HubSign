@@ -466,6 +466,8 @@ def create_app(
         if not (first or s.allow_signup or inv):
             raise HTTPException(403, "signup is disabled")
         email = b.email.lower()
+        if first and s.first_user_email and email != s.first_user_email.strip().lower():
+            raise HTTPException(403, "the first account is reserved for the administrator's email address")
         if inv and inv["email"] != email:
             raise HTTPException(422, "that invitation was sent to a different email address")
         if db.one("SELECT 1 AS x FROM users WHERE email=?", (email,)):
