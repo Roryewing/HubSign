@@ -60,5 +60,37 @@ class HubSign:
         Path(path).write_bytes(self._ok(self.http.get(f"/v1/envelopes/{envelope_id}/signed")))
         return Path(path)
 
+    def create_template(
+        self, pdf: str | Path | bytes, *, name: str, roles: list[dict], fields: list[dict] | None = None, **kw
+    ) -> dict:
+        data = pdf if isinstance(pdf, bytes) else Path(pdf).read_bytes()
+        body = {
+            "name": name,
+            "document_base64": base64.b64encode(data).decode(),
+            "roles": roles,
+            "fields": fields or [],
+            **kw,
+        }
+        return self._ok(self.http.post("/v1/templates", json=body))
+
+    def send_template(self, template_id: str, recipients: list[dict], **kw) -> dict:
+        return self._ok(self.http.post(f"/v1/templates/{template_id}/envelopes", json={"recipients": recipients, **kw}))
+
+    def bulk_send(
+        self, template_id: str, rows: list[list[dict]], wait: bool = True, timeout: float = 120, **kw
+    ) -> dict:
+        """Send a template to many people. Each row is one envelope: a list of people, one per template role."""
+        b = self._ok(self.http.post(f"/v1/templates/{template_id}/bulk", json={"rows": rows, **kw}))
+        deadline = time.time() + timeout
+        while wait and b["status"] in ("queued", "running") and time.time() < deadline:
+            time.sleep(1)
+            b = self._ok(self.http.get(f"/v1/batches/{b['id']}"))
+        return b
+
+    def verify(self, pdf: str | Path | bytes) -> dict:
+        """Check a sealed PDF. `result["ok"]` is True only if it is unchanged since HubSign sealed it."""
+        data = pdf if isinstance(pdf, bytes) else Path(pdf).read_bytes()
+        return self._ok(self.http.post("/v1/verify", content=data, headers={"Content-Type": "application/pdf"}))
+
     def create_webhook(self, url: str, events: list[str] | None = None) -> dict:
         return self._ok(self.http.post("/v1/webhooks", json={"url": url, "events": events or []}))

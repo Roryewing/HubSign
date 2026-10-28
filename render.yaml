@@ -1,5 +1,6 @@
-# Render blueprint. Documents and the database live on disk, so this needs a paid plan with a
+# Render blueprint, single node. Documents and the database live on the disk, so this needs a paid plan with a
 # persistent disk; the free plan loses everything on every restart and is not suitable.
+# For several nodes drop the disk and set HUBSIGN_DATABASE_URL (Render Postgres) and HUBSIGN_S3_BUCKET instead.
 services:
   - type: web
     name: hubsign
@@ -15,7 +16,11 @@ services:
     envVars:
       - key: HUBSIGN_BASE_URL
         sync: false # set to the service URL after the first deploy, e.g. https://hubsign.onrender.com
+      - key: HUBSIGN_TRUST_PROXY_HOPS
+        value: "1" # Render puts one proxy in front
       - key: HUBSIGN_ALLOW_SIGNUP
         value: "false" # first account is always allowed; this closes registration after it
       - key: HUBSIGN_SECRET
         generateValue: true
+      - key: HUBSIGN_TSA_URL
+        value: http://timestamp.digicert.com

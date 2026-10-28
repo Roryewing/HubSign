@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>HubSign - Verify a document</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234b2bd6'/%3E%3Cpath d='M8 21c4-9 6-9 6-3s3 3 10-5' stroke='%23ffd23f' stroke-width='2.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f5f4fa;--surface:#fff;--ink:#150f33;--muted:#645f7d;--line:#e3e1ee;--primary:#4b2bd6;--ok:#127a4a;--ok-bg:#e1f5ea;--bad:#b3261e;--bad-bg:#fce8e6;--warn:#8a5a00;--warn-bg:#fff2d1;--mute-bg:#eeedf6}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0e0b1f;--surface:#171331;--ink:#ece9fb;--muted:#a09bbd;--line:#2b2650;--primary:#8d78ff;--ok:#5fd69b;--ok-bg:#12332a;--bad:#ff8f87;--bad-bg:#3b1c20;--warn:#ffd27a;--warn-bg:#3a3012;--mute-bg:#1f1a40;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#0e0b1f;--surface:#171331;--ink:#ece9fb;--muted:#a09bbd;--line:#2b2650;--primary:#8d78ff;--ok:#5fd69b;--ok-bg:#12332a;--bad:#ff8f87;--bad-bg:#3b1c20;--warn:#ffd27a;--warn-bg:#3a3012;--mute-bg:#1f1a40;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 Inter,system-ui,sans-serif}
+main{max-width:680px;margin:0 auto;padding:7vh max(16px,env(safe-area-inset-left)) 48px}
+.logo{display:flex;gap:10px;align-items:center;font-weight:700;font-size:22px;letter-spacing:-.02em;margin-bottom:6px}
+h1{font-size:26px;margin:18px 0 6px;letter-spacing:-.02em;font-weight:600}.muted{color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;margin-top:16px}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:40px 16px;text-align:center;cursor:pointer;background:var(--surface);display:block}.drop:hover,.drop.over{border-color:var(--primary);background:var(--mute-bg)}.drop b{display:block;font-size:16px}
+.res{border-radius:14px;padding:20px;margin-top:16px;border:1px solid}
+.res.ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok)}.res.bad{background:var(--bad-bg);color:var(--bad);border-color:var(--bad)}.res.warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
+.res h2{margin:0 0 6px;font-size:19px}.res dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:12px 0 0;color:var(--ink);font-size:14px}.res dt{color:var(--muted)}.res dd{margin:0;word-break:break-word}
+code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+</style>
+</head>
+<body>
+<main>
+<div class="logo"><svg width="30" height="30" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#4b2bd6"/><path d="M8 21c4-9 6-9 6-3s3 3 10-5" stroke="#ffd23f" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>HubSign</div>
+<h1>Verify a signed document</h1>
+<p class="muted">Drop a PDF to check that it still matches what HubSign sealed. Your file is checked on this server and is not stored.</p>
+<label class="drop" id="drop"><input type="file" id="file" accept="application/pdf,.pdf" hidden><b>Drag a PDF here or click to browse</b><span class="muted">Up to 20 MB</span></label>
+<div id="out" aria-live="polite"></div>
+<div class="card"><b>What this proves</b><p class="muted" style="margin-bottom:0">A green result means the file is byte-for-byte what HubSign sealed on the date shown: no signature, page or text was changed afterwards. It does not by itself prove who the signers were. That is recorded in the certificate of completion at the end of the PDF, including how each signer was verified.</p></div>
+<p class="muted" style="font-size:13px">Adobe Acrobat can also check the seal. If it says the signer is unknown, add <a href="/.well-known/hubsign-seal.pem">this certificate</a> as a trusted identity, or ask the sender whether they use a certificate from a recognised authority.</p>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function check(f){
+  if(!f)return;$("#out").innerHTML='<p class="muted">Checking…</p>';
+  try{
+    const r=await fetch("/v1/verify",{method:"POST",headers:{"Content-Type":"application/pdf"},body:await f.arrayBuffer()});
+    if(r.status===429)return $("#out").innerHTML='<div class="res warn"><h2>Slow down</h2>Too many checks, try again in a minute.</div>';
+    const j=await r.json();if(!r.ok)throw new Error(j.detail||"failed");
+    const s=(j.signatures||[])[0]||{};
+    if(!j.signed)$("#out").innerHTML='<div class="res warn"><h2>No seal found</h2>This PDF is not sealed, so nothing vouches for it. A completed HubSign document always carries a seal.</div>';
+    else if(!j.ok)$("#out").innerHTML=`<div class="res bad"><h2>This file has been changed</h2>The seal no longer matches the content. Do not rely on this copy; ask the sender for the original completed document.<dl><dt>Sealed as</dt><dd>${esc(s.signer||"")}</dd></dl></div>`;
+    else $("#out").innerHTML=`<div class="res ok"><h2>Intact and unchanged</h2>This is the document HubSign sealed.${j.sandbox?" <b>It was made in the sandbox and is not legally binding.</b>":""}<dl><dt>Sealed by</dt><dd>${esc(s.signer)}</dd><dt>Sealed at</dt><dd>${esc(s.signed_at||"")}${s.trusted_timestamp?" (independently timestamped)":" (server clock, not independently timestamped)"}</dd>${j.envelope_id?`<dt>Envelope</dt><dd><code>${esc(j.envelope_id)}</code></dd>`:""}${j.issued_by_this_server===true?"<dt>This server</dt><dd>Issued this exact file</dd>":j.issued_by_this_server===false?"<dt>This server</dt><dd>Has a different version of this envelope</dd>":""}</dl></div>`;
+  }catch(e){$("#out").innerHTML=`<div class="res bad"><h2>Could not check</h2>${esc(e.message)}</div>`}
+}
+$("#file").onchange=e=>check(e.target.files[0]);
+const dz=$("#drop");dz.ondragover=e=>{e.preventDefault();dz.classList.add("over")};dz.ondragleave=()=>dz.classList.remove("over");dz.ondrop=e=>{e.preventDefault();dz.classList.remove("over");check(e.dataTransfer.files[0])};
+</script>
+</body>
+</html>

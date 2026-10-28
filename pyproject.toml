@@ -1,6 +1,6 @@
 [project]
 name = "hubsign"
-version = "0.1.0"
+version = "0.3.0"
 description = "E-signature platform with a developer API, signed webhooks and a sandbox"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -12,13 +12,21 @@ dependencies = [
   "pypdf>=5.0",
   "reportlab>=4.2",
   "httpx>=0.27",
+  "pyhanko>=0.25",
+  "psycopg[binary,pool]>=3.2",
+  "boto3>=1.35",
 ]
 
 [project.scripts]
 hubsign = "hubsign.__main__:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = [
+    "moto[s3]>=5",
+    "pgserver>=0.1.4",
+    "pytest>=8",
+    "ruff>=0.6",
+]
 
 [build-system]
 requires = ["hatchling"]
