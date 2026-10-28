@@ -6,6 +6,10 @@ import base64
 import io
 from xml.sax.saxutils import escape
 
+from pdfminer.converter import PDFPageAggregator
+from pdfminer.layout import LTChar
+from pdfminer.pdfinterp import PDFPageInterpreter, PDFResourceManager
+from pdfminer.pdfpage import PDFPage
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -33,6 +37,54 @@ def inspect(data: bytes) -> int:
     if not 1 <= n <= MAX_PAGES:
         raise ValueError(f"PDF must have 1 to {MAX_PAGES} pages")
     return n
+
+
+def find_anchors(pdf: bytes, text: str) -> list[dict]:
+    """Every place `text` is printed, even invisibly (white or tiny text). Positions are in points from the top-left.
+
+    pdfminer's layout analysis is switched off so characters come back in the order the PDF draws them; a string drawn
+    by one text operation, as an anchor tag is, is then contiguous.
+    """
+    out: list[dict] = []
+    rm = PDFResourceManager()
+    dev = PDFPageAggregator(rm, laparams=None)
+    it = PDFPageInterpreter(rm, dev)
+    for n, pg in enumerate(PDFPage.get_pages(io.BytesIO(pdf)), start=1):
+        it.process_page(pg)
+        page = dev.get_result()
+        chars = [o for o in page if isinstance(o, LTChar)]
+        s = "".join(c.get_text() for c in chars)
+        i = s.find(text)
+        while i != -1:
+            c = chars[i]
+            out.append({"page": n, "x": c.x0, "top": page.height - c.y1, "page_w": page.width, "page_h": page.height})
+            i = s.find(text, i + 1)
+    return out
+
+
+def merge(parts: list[bytes]) -> tuple[bytes, list[tuple[int, int]]]:
+    """Concatenate PDFs -> (bytes, [(first page, page count)] per part, pages 1-based)."""
+    out = PdfWriter()
+    spans, at = [], 1
+    for data in parts:
+        r = PdfReader(io.BytesIO(data))
+        for page in r.pages:
+            out.add_page(page)
+        spans.append((at, len(r.pages)))
+        at += len(r.pages)
+    buf = io.BytesIO()
+    out.write(buf)
+    return buf.getvalue(), spans
+
+
+def excerpt(pdf: bytes, first: int, count: int) -> bytes:
+    r = PdfReader(io.BytesIO(pdf))
+    out = PdfWriter()
+    for i in range(first - 1, first - 1 + count):
+        out.add_page(r.pages[i])
+    buf = io.BytesIO()
+    out.write(buf)
+    return buf.getvalue()
 
 
 def png_from_data_url(v: str) -> bytes | None:

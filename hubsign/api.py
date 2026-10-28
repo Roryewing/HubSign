@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from . import __version__, mail, security
 from .config import Settings
@@ -54,36 +54,112 @@ class AuthIn(BaseModel):
     phone: str | None = Field(default=None, max_length=20, description="E.164, e.g. +14165550123, for method=sms")
 
 
+def _ok_return_url(u: str | None) -> str | None:
+    if not u:
+        return None
+    from urllib.parse import urlsplit
+
+    p = urlsplit(u)
+    local = p.scheme == "http" and p.hostname in ("localhost", "127.0.0.1")
+    if not (p.scheme == "https" or local) or not p.hostname or len(u) > 500:
+        raise ValueError("return_url must be https (or http://localhost)")
+    return u
+
+
 class RecipientIn(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     email: str = Field(pattern=EMAIL, max_length=200)
     role: Literal["signer", "cc"] = "signer"
     routing_order: int = Field(default=1, ge=1, le=20)
     authentication: AuthIn = AuthIn()
+    embedded: bool = Field(
+        default=False, description="They sign inside your own app: no email is sent, use signing_url"
+    )
+    return_url: str | None = Field(
+        default=None, description="Where the signer's browser goes after signing or declining"
+    )
+
+    @field_validator("return_url")
+    @classmethod
+    def _return_url(cls, v):
+        return _ok_return_url(v)
+
+
+class ReplyTo(BaseModel):
+    name: str = Field(default="", max_length=100)
+    email: str = Field(pattern=EMAIL, max_length=200)
+
+
+class AnchorIn(BaseModel):
+    text: str = Field(
+        min_length=1, max_length=80, description="Text printed in the PDF, even invisibly; one field per occurrence"
+    )
+    x_offset: float = Field(default=0, ge=-600, le=600, description="Points right of the text's left edge")
+    y_offset: float = Field(
+        default=0, ge=-800, le=800, description="Points below the text's top edge (negative = above)"
+    )
+    width: float | None = Field(default=None, gt=0, le=600, description="Points")
+    height: float | None = Field(default=None, gt=0, le=400, description="Points")
+    optional: bool = Field(default=False, description="Skip silently when the text is not in the document")
 
 
 class FieldIn(BaseModel):
     recipient: int = Field(ge=0, description="Index into `recipients`")
     type: FieldType
-    page: int = Field(ge=1)
-    x: float = Field(ge=0, le=1, description="Left edge, fraction of page width")
-    y: float = Field(ge=0, le=1, description="Top edge, fraction of page height")
+    document: int | None = Field(
+        default=None,
+        ge=0,
+        description="Index into `documents`. Positioned fields default to the first; anchored fields search them all",
+    )
+    page: int = Field(default=1, ge=1, description="Page within that document (not needed with an anchor)")
+    x: float | None = Field(default=None, ge=0, le=1, description="Left edge, fraction of page width")
+    y: float | None = Field(default=None, ge=0, le=1, description="Top edge, fraction of page height")
     w: float | None = Field(default=None, gt=0, le=1)
     h: float | None = Field(default=None, gt=0, le=1)
+    anchor: AnchorIn | None = Field(default=None, description="Place by text in the PDF instead of x and y")
     required: bool = True
-    label: str = Field(default="", max_length=100)
+    label: str = Field(default="", max_length=100, description="A name for the field; form data is returned by label")
+    value: str | None = Field(
+        default=None, max_length=4000, description="Prefill a text or checkbox field; the signer cannot change it"
+    )
+
+    @model_validator(mode="after")
+    def _where(self):
+        if self.anchor is None and (self.x is None or self.y is None):
+            raise ValueError("give x and y, or an anchor")
+        return self
+
+
+class DocIn(BaseModel):
+    id: str = Field(default="", max_length=20, pattern=r"^[A-Za-z0-9_-]*$")
+    name: str = Field(default="document.pdf", max_length=200)
+    document_base64: str
 
 
 class EnvelopeIn(BaseModel):
     subject: str = Field(min_length=1, max_length=200)
     message: str = Field(default="", max_length=2000)
-    document_base64: str = Field(description="The PDF, base64 encoded")
+    document_base64: str | None = Field(default=None, description="The PDF, base64 encoded (or use `documents`)")
     document_name: str = Field(default="document.pdf", max_length=200)
+    documents: list[DocIn] = Field(
+        default=[], max_length=10, description="Several PDFs in one envelope; fields refer to them by index"
+    )
     recipients: list[RecipientIn] = Field(min_length=1)
     fields: list[FieldIn] = []
     sequential: bool = Field(default=True, description="Signers sign in routing_order; false = all at once")
     send: bool = Field(default=False, description="Send immediately instead of leaving a draft")
     metadata: dict[str, str] = Field(default_factory=dict, description="Your own references, echoed in webhooks")
+    allow_reassign: bool = Field(default=False, description="Signers may hand their part to someone else")
+    reply_to: ReplyTo | None = None
+    sender_name: str = Field(
+        default="", max_length=100, description="Shown in the email as who sent it; defaults to the organisation"
+    )
+
+    @model_validator(mode="after")
+    def _one_source(self):
+        if bool(self.document_base64) == bool(self.documents):
+            raise ValueError("give either document_base64 or documents")
+        return self
 
 
 class RoleAuthIn(BaseModel):
@@ -149,6 +225,11 @@ class WebhookIn(BaseModel):
 class CompleteIn(BaseModel):
     consent: Literal[True]
     values: dict[str, str | bool] = {}
+
+
+class ReassignIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    email: str = Field(pattern=EMAIL, max_length=200)
 
 
 class DeclineIn(BaseModel):
@@ -542,14 +623,26 @@ def create_app(
         out = []
         for f in fields:
             dw, dh = DEFAULT_SIZE[f.type]
-            out.append({**f.model_dump(), "w": f.w or dw, "h": f.h or dh})
+            d = f.model_dump()
+            if f.anchor is None:
+                d["w"], d["h"] = f.w or dw, f.h or dh
+            out.append(d)
         return out
 
     @app.post("/v1/envelopes", status_code=201, tags=["envelopes"])
     def create_envelope(b: EnvelopeIn, c: Ctx = Depends(need("sender"))):
+        docs = (
+            [
+                {"id": d.id or str(i + 1), "name": d.name, "data": decode_doc(d.document_base64)}
+                for i, d in enumerate(b.documents)
+            ]
+            if b.documents
+            else [{"id": "1", "name": b.document_name, "data": decode_doc(b.document_base64)}]
+        )
         eid = svc.create(
-            c.org, c.user["id"], c.mode, subject=b.subject, message=b.message, doc=decode_doc(b.document_base64), doc_name=b.document_name,
+            c.org, c.user["id"], c.mode, subject=b.subject, message=b.message, documents=docs,
             recipients=[r.model_dump() for r in b.recipients], fields=sized(b.fields), sequential=b.sequential, metadata=b.metadata,
+            allow_reassign=b.allow_reassign, reply_to=b.reply_to.model_dump() if b.reply_to else None, sender_name=b.sender_name,
         )  # fmt: skip
         if b.send:
             svc.send(eid, c.org, c.mode)
@@ -625,6 +718,17 @@ def create_app(
     def signed_document(eid: str, c: Ctx = Depends(ctx)):
         svc.env(eid, c.org, c.mode)
         return pdf_response(svc.file_bytes(eid, True), f"{eid}-signed.pdf")
+
+    @app.get("/v1/envelopes/{eid}/form_data", tags=["envelopes"])
+    def envelope_form_data(eid: str, c: Ctx = Depends(ctx)):
+        """What signers typed or ticked, by field label."""
+        return {"form_data": svc.form_data(eid, c.org, c.mode)}
+
+    @app.get("/v1/envelopes/{eid}/documents/{doc_id}", tags=["envelopes"])
+    def envelope_document(eid: str, doc_id: str, c: Ctx = Depends(ctx)):
+        """One document of a completed envelope with signatures on it, sealed as an excerpt."""
+        data, name = svc.document_excerpt(eid, doc_id, c.org, c.mode)
+        return pdf_response(data, f"signed-{name}")
 
     # ---- templates + bulk ------------------------------------------------------------------------------------------
     def tpl_out(t: dict) -> dict:
@@ -858,6 +962,11 @@ def create_app(
     @app.post("/sign-api/{token}/complete", tags=["signing"])
     def sign_complete(token: str, b: CompleteIn, request: Request):
         return svc.complete(token, b.values, ip_of(request), request.headers.get("user-agent", ""), sig_cookie(request))
+
+    @app.post("/sign-api/{token}/reassign", tags=["signing"])
+    def sign_reassign(token: str, b: ReassignIn, request: Request):
+        svc.reassign(token, b.name, b.email, ip_of(request), request.headers.get("user-agent", ""), sig_cookie(request))
+        return {"ok": True}
 
     @app.post("/sign-api/{token}/decline", tags=["signing"])
     def sign_decline(token: str, b: DeclineIn, request: Request):

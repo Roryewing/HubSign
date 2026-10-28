@@ -71,11 +71,14 @@ const MESSAGES={
   signed:["✓","You're all set","Thank you for signing. Other people still need to sign, and you will get a copy when the document is complete."],
   declined:["✕","This document was declined","Nobody can sign it now. Contact the sender if this was a mistake."],
   voided:["✕","This document was cancelled","The sender cancelled it. Contact them if you think this is wrong."],
-  completed:["✓","You're all set","Everyone has signed. Download your signed copy with its certificate of completion."]
+  completed:["✓","You're all set","Everyone has signed. Download your signed copy with its certificate of completion."],
+  reassigned:["✓","Passed on","We emailed the link to the person you chose. It no longer works for you."]
 };
+function backUrl(ev){try{if(!S.info||!S.info.return_url)return null;const u=new URL(S.info.return_url);if(!["https:","http:"].includes(u.protocol))return null;u.searchParams.set("event",ev);return u.toString()}catch{return null}}
 function endState(st){
-  const [i,h,t]=MESSAGES[st];$("#overlay").innerHTML="";$("#hright").innerHTML="";$("#msg").textContent="";
-  $("#root").innerHTML=`<div class="card state"><div class="ico" style="background:${st==="completed"||st==="signed"?"var(--ok-bg);color:var(--ok)":"var(--mute-bg);color:var(--muted)"}">${i}</div><h1>${h}</h1><p class="muted">${t}</p>${st==="completed"?`<p style="margin-top:18px"><a class="btn y" href="${A("/signed")}">DOWNLOAD</a></p>`:""}</div>`;
+  const [i,h,t]=MESSAGES[st];const back=["signed","completed","declined","reassigned"].includes(st)?backUrl(st==="declined"?"decline":st==="reassigned"?"reassigned":"signing_complete"):null;$("#overlay").innerHTML="";$("#hright").innerHTML="";$("#msg").textContent="";
+  $("#root").innerHTML=`<div class="card state"><div class="ico" style="background:${st==="completed"||st==="signed"?"var(--ok-bg);color:var(--ok)":"var(--mute-bg);color:var(--muted)"}">${i}</div><h1>${h}</h1><p class="muted">${t}</p>${st==="completed"?`<p style="margin-top:18px"><a class="btn y" href="${A("/signed")}">DOWNLOAD</a></p>`:""}${back?`<p style="margin-top:14px"><a class="btn ${st==="completed"?"":"y"}" href="${esc(back)}">CONTINUE</a></p>`:""}</div>`;
+  if(back&&st!=="completed")setTimeout(()=>{location.href=back},1500);
 }
 
 async function start(){
@@ -109,11 +112,11 @@ function verifyView(){
 
 /* ---------- signing ---------- */
 async function sign(){
-  $("#hright").innerHTML=`<span style="display:flex;gap:10px;align-items:center"><span id="left" class="muted" style="color:#cfc9ee;font-size:13px"></span><span class="menuwrap"><button class="oa" id="oa">Other actions ▾</button><div class="menu" id="oam" hidden><button id="mchg">Change signature style</button><button id="mdl">Download original PDF</button><button id="mdec">Decline to sign</button></div></span><button class="fin" id="fin" disabled>FINISH</button></span>`;
+  $("#hright").innerHTML=`<span style="display:flex;gap:10px;align-items:center"><span id="left" class="muted" style="color:#cfc9ee;font-size:13px"></span><span class="menuwrap"><button class="oa" id="oa">Other actions ▾</button><div class="menu" id="oam" hidden><button id="mchg">Change signature style</button><button id="mdl">Download original PDF</button>${S.info.allow_reassign?`<button id="mre">Assign to someone else</button>`:""}<button id="mdec">Decline to sign</button></div></span><button class="fin" id="fin" disabled>FINISH</button></span>`;
   $("#msg").textContent="Please review and act on these documents";
   $("#root").innerHTML=`<div class="pdfwrap" id="pdf"><div class="muted">Loading document…</div></div>`;
   $("#oa").onclick=e=>{e.stopPropagation();$("#oam").hidden=!$("#oam").hidden};document.onclick=()=>{const m=$("#oam");if(m)m.hidden=true};
-  $("#mdec").onclick=declineModal;$("#mdl").onclick=()=>{location.href=A("/document")};$("#mchg").onclick=()=>adoptModal(()=>{});
+  $("#mdec").onclick=declineModal;if($("#mre"))$("#mre").onclick=reassignModal;$("#mdl").onclick=()=>{location.href=A("/document")};$("#mchg").onclick=()=>adoptModal(()=>{});
   $("#fin").onclick=finish;
   const buf=await (await fetch(A("/document"))).arrayBuffer();
   pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -138,11 +141,13 @@ function fieldClick(f){
   }else if(f.type==="checkbox"){S.vals[f.id]=!S.vals[f.id];S.started=true;update()}
 }
 const fixedText=f=>f.type==="date"?new Date().toISOString().slice(0,10):f.type==="name"?S.info.recipient.name:S.info.recipient.email;
-const isFilled=f=>FIXED.includes(f.type)||(S.vals[f.id]&&String(S.vals[f.id]).trim());
+const isFixed=f=>FIXED.includes(f.type)||f.locked;
+const isFilled=f=>isFixed(f)||(S.vals[f.id]&&String(S.vals[f.id]).trim());
 function update(){
   S.info.fields.forEach(f=>{
     const d=$("#f_"+f.id);if(!d)return;const v=S.vals[f.id];let html="",cls="fld";
-    if(FIXED.includes(f.type)){cls+=" fixed";html=esc(fixedText(f))}
+    if(f.locked){cls+=" fixed";html=f.type==="checkbox"?(f.value==="true"?"☑":"☐"):esc(f.value||"")}
+    else if(FIXED.includes(f.type)){cls+=" fixed";html=esc(fixedText(f))}
     else if(f.type==="signature"||f.type==="initials")html=v?`<img alt="${f.type}" src="${v}">`:`<span>${f.type==="signature"?"✍ Sign":"Initial"}</span>${f.required?'<span class="req">Required</span>':""}`;
     else if(f.type==="checkbox")html=`<input type="checkbox" ${v?"checked":""} aria-label="checkbox">`;
     else html=`<input type="text" maxlength="500" value="${esc(v||"")}" aria-label="${esc(f.label||"text")}" placeholder="${esc(f.label||"Text")}">`;
@@ -203,6 +208,13 @@ function adoptModal(done){
     S.info.fields.forEach(f=>{if((f.type==="signature"||f.type==="initials")&&S.vals[f.id])S.vals[f.id]=S.adopted[f.type]});
     $("#overlay").innerHTML="";done();update();
   };
+}
+function reassignModal(){
+  $("#overlay").innerHTML=`<div class="modalbg"><div class="box"><h1>Assign to someone else</h1><p class="muted">They will get an email with their own link. Yours will stop working.</p>
+  <label class="f">Their name<input type="text" id="rn" maxlength="100"></label><label class="f" style="margin-top:10px">Their email<input type="text" id="re" maxlength="200" inputmode="email"></label><div id="rerr"></div>
+  <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button class="btn" id="cx">BACK</button><button class="btn y" id="rok">ASSIGN</button></div></div></div>`;
+  $("#cx").onclick=()=>$("#overlay").innerHTML="";
+  $("#rok").onclick=async()=>{try{await call("/reassign",{name:$("#rn").value.trim(),email:$("#re").value.trim()});endState("reassigned")}catch(e){$("#rerr").innerHTML=`<div class="err">${esc(e.message)}</div>`}};
 }
 function declineModal(){
   $("#overlay").innerHTML=`<div class="modalbg"><div class="box"><h1>Decline to sign</h1><p class="muted">The sender will be told, and nobody will be able to sign this document.</p><textarea id="why" rows="3" maxlength="300" placeholder="Reason (optional)"></textarea><div id="de"></div><div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button class="btn" id="cx">BACK</button><button class="btn y" id="dok">DECLINE</button></div></div></div>`;

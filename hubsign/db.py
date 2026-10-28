@@ -25,18 +25,19 @@ CREATE TABLE IF NOT EXISTS api_keys(id TEXT PRIMARY KEY, org_id TEXT NOT NULL, c
 CREATE TABLE IF NOT EXISTS envelopes(id TEXT PRIMARY KEY, org_id TEXT NOT NULL, created_by TEXT NOT NULL, mode TEXT NOT NULL,
   subject TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL, sequential INTEGER NOT NULL, doc_name TEXT NOT NULL,
   doc_sha256 TEXT NOT NULL, pages INTEGER NOT NULL, final_sha256 TEXT, metadata TEXT NOT NULL, created_at TEXT NOT NULL,
-  sent_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL);
+  sent_at TEXT, completed_at TEXT, updated_at TEXT NOT NULL, parts TEXT NOT NULL DEFAULT '[]',
+  allow_reassign INTEGER NOT NULL DEFAULT 0, reply_to TEXT, sender_name TEXT);
 CREATE INDEX IF NOT EXISTS ix_env_org ON envelopes(org_id, mode, updated_at);
 CREATE TABLE IF NOT EXISTS recipients(id TEXT PRIMARY KEY, envelope_id TEXT NOT NULL, idx INTEGER NOT NULL, name TEXT NOT NULL,
   email TEXT NOT NULL, phone TEXT, role TEXT NOT NULL, routing_order INTEGER NOT NULL, token TEXT UNIQUE NOT NULL,
   status TEXT NOT NULL, signed_at TEXT, sign_ip TEXT, auth_method TEXT NOT NULL, auth_secret TEXT, verified_at TEXT,
-  session_hash TEXT, session_expires TEXT);
+  session_hash TEXT, session_expires TEXT, embedded INTEGER NOT NULL DEFAULT 0, return_url TEXT);
 CREATE INDEX IF NOT EXISTS ix_rcp_env ON recipients(envelope_id);
 CREATE TABLE IF NOT EXISTS otps(recipient_id TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL,
   attempts INTEGER NOT NULL, sent_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS fields(id TEXT PRIMARY KEY, envelope_id TEXT NOT NULL, recipient_id TEXT NOT NULL, type TEXT NOT NULL,
   page INTEGER NOT NULL, x DOUBLE PRECISION, y DOUBLE PRECISION, w DOUBLE PRECISION, h DOUBLE PRECISION,
-  required INTEGER NOT NULL, label TEXT NOT NULL, value TEXT);
+  required INTEGER NOT NULL, label TEXT NOT NULL, value TEXT, locked INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS ix_fld_env ON fields(envelope_id);
 CREATE TABLE IF NOT EXISTS events(id {AUTOID}, envelope_id TEXT NOT NULL, ts TEXT NOT NULL,
   type TEXT NOT NULL, actor TEXT NOT NULL, ip TEXT, ua TEXT, detail TEXT);

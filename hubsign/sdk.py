@@ -92,5 +92,14 @@ class HubSign:
         data = pdf if isinstance(pdf, bytes) else Path(pdf).read_bytes()
         return self._ok(self.http.post("/v1/verify", content=data, headers={"Content-Type": "application/pdf"}))
 
+    def form_data(self, envelope_id: str) -> dict:
+        """What signers typed or ticked, by field label."""
+        return self._ok(self.http.get(f"/v1/envelopes/{envelope_id}/form_data"))["form_data"]
+
+    def download_document(self, envelope_id: str, doc_id: str, path: str | Path) -> Path:
+        """One document of a completed envelope, sealed as an excerpt."""
+        Path(path).write_bytes(self._ok(self.http.get(f"/v1/envelopes/{envelope_id}/documents/{doc_id}")))
+        return Path(path)
+
     def create_webhook(self, url: str, events: list[str] | None = None) -> dict:
         return self._ok(self.http.post("/v1/webhooks", json={"url": url, "events": events or []}))
