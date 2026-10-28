@@ -21,6 +21,8 @@ def _from(s: Settings) -> str:
 
 
 def configured(s: Settings) -> bool:
+    if s.mail_relay_url:
+        return bool(s.mail_relay_secret)
     return bool(_from(s) and (s.sendgrid_api_key or s.smtp_host))
 
 
@@ -29,6 +31,24 @@ def _deliver(
 ) -> None:
     sender = {"email": _from(s), "name": from_name or s.mail_from_name}
     try:
+        if s.mail_relay_url:
+            # the relay owns the sender address and the provider credentials; we only say what to send, and to whom
+            r = httpx.post(
+                s.mail_relay_url,
+                json={
+                    "to": to,
+                    "subject": subject,
+                    "text": text,
+                    "html": html,
+                    "reply_to": reply_to,
+                    "from_name": from_name or s.mail_from_name,
+                },
+                headers={"X-Relay-Secret": s.mail_relay_secret},
+                timeout=20,
+            )
+            if r.status_code >= 300:
+                log.error("mail relay refused mail to %s: %s %s", to, r.status_code, r.text[:200])
+            return
         if s.sendgrid_api_key:
             body = {
                 "personalizations": [{"to": [{"email": to}]}],
