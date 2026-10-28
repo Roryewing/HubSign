@@ -305,7 +305,9 @@ def test_s3_storage(make_env, monkeypatch):
         done = sign_all(env, e)
         assert done["status"] == "completed"
         keys = sorted(
-            o["Key"] for o in boto3.client("s3", region_name="us-east-1").list_objects_v2(Bucket="docs")["Contents"]
+            o["Key"]
+            for o in boto3.client("s3", region_name="us-east-1").list_objects_v2(Bucket="docs")["Contents"]
+            if "/seal/" not in o["Key"]  # the generated seal certificate is kept next to the documents
         )
         assert keys == [f"hubsign/{e['id']}.pdf", f"hubsign/{e['id']}.signed.pdf"]
         assert not list((env.settings.data_dir / "docs").glob("*.pdf"))  # nothing on local disk
@@ -433,7 +435,10 @@ def test_documents_in_the_database(make_env):
     assert done["status"] == "completed"
     assert not list(env.settings.data_dir.rglob("*.pdf"))  # nothing was written to disk
     db = env.app.state.db
-    assert sorted(r["k"] for r in db.q("SELECT k FROM blobs")) == [f"{e['id']}.pdf", f"{e['id']}.signed.pdf"]
+    assert sorted(r["k"] for r in db.q("SELECT k FROM blobs") if not r["k"].startswith("seal/")) == [
+        f"{e['id']}.pdf",
+        f"{e['id']}.signed.pdf",
+    ]
     assert env.client.post(
         "/v1/verify", content=env.client.get(f"/v1/envelopes/{e['id']}/signed", headers=env.h).content
     ).json()["ok"]
@@ -443,3 +448,24 @@ def test_documents_in_the_database(make_env):
     assert (
         db.one("SELECT 1 AS x FROM blobs WHERE k=?", (f"{drafts['id']}.pdf",)) is None
     )  # deleting a draft deletes its file
+
+
+def test_seal_certificate_survives_a_wiped_disk(make_env, tmp_path):
+    """On a host with an ephemeral disk the generated certificate lives in the database, so a restart on a fresh
+    disk keeps the same signer identity and earlier documents still verify."""
+    env = make_env(documents_in_database=True)
+    e = env.envelope().json()
+    sign_all(env, e)
+    signed = env.client.get(f"/v1/envelopes/{e['id']}/signed", headers=env.h).content
+    fp = env.client.get("/v1/seal").json()["fingerprint_sha256"]
+    import shutil
+
+    from fastapi.testclient import TestClient
+
+    from hubsign.api import create_app
+
+    shutil.rmtree(env.settings.data_dir / "seal")  # the host's disk was wiped; the database was not
+    c2 = TestClient(create_app(env.settings, db_schema=env.schema))
+    assert c2.get("/v1/seal").json()["fingerprint_sha256"] == fp
+    rep = c2.post("/v1/verify", content=signed).json()
+    assert rep["ok"] and rep["signatures"][0]["trusted_by_this_server"]

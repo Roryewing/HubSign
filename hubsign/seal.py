@@ -76,15 +76,27 @@ def _generate(cert_path: Path, key_path: Path) -> None:
 
 
 class Sealer:
-    def __init__(self, s: Settings, timestamper=None):
+    def __init__(self, s: Settings, timestamper=None, store=None):
+        """`store` (database or bucket storage) keeps a generated certificate across restarts on hosts whose disk is
+        wiped, so documents sealed yesterday still verify against the same certificate today."""
         self.s = s
         if s.seal_cert_file and s.seal_key_file:
             self.cert_path, self.key_path, self.generated = Path(s.seal_cert_file), Path(s.seal_key_file), False
         else:
             d = s.data_dir / "seal"
             self.cert_path, self.key_path, self.generated = d / "seal.pem", d / "seal-key.pem", True
-            if not self.cert_path.exists() or not self.key_path.exists():
+            kept = store and (store.get("seal/cert.pem"), store.get("seal/key.pem"))
+            if kept and all(kept):
+                d.mkdir(parents=True, exist_ok=True)
+                self.cert_path.write_bytes(kept[0])
+                fd = os.open(self.key_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "wb") as f:
+                    f.write(kept[1])
+            elif not self.cert_path.exists() or not self.key_path.exists():
                 _generate(self.cert_path, self.key_path)
+            if store and not (kept and all(kept)):
+                store.put("seal/cert.pem", self.cert_path.read_bytes())
+                store.put("seal/key.pem", self.key_path.read_bytes())
         chain = [s.seal_chain_file] if s.seal_chain_file else []
         pw = s.seal_key_password.encode() if s.seal_key_password else None
         self.signer = signers.SimpleSigner.load(
