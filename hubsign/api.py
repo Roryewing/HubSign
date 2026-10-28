@@ -283,7 +283,7 @@ def create_app(
     db = Database(s.database_url or (s.data_dir / "hubsign.db"), schema=db_schema)
     hooks = Webhooks(db, s, **({"sender": sender} if sender else {}))
     ident = Identity(s, db, **({"sms_sender": sms_sender} if sms_sender else {}))
-    storage = make_storage(s)
+    storage = make_storage(s, db)
     svc = Service(s, db, hooks, storage, ident, Sealer(s, timestamper=timestamper))
     https = s.base_url.startswith("https")
     if https and s.trust_proxy_hops == 0:

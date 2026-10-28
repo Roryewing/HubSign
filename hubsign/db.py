@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS batches(id TEXT PRIMARY KEY, org_id TEXT NOT NULL, cr
   template_id TEXT NOT NULL, subject TEXT NOT NULL, message TEXT NOT NULL, send INTEGER NOT NULL, total INTEGER NOT NULL,
   done INTEGER NOT NULL, failed INTEGER NOT NULL, status TEXT NOT NULL, rows TEXT NOT NULL, errors TEXT NOT NULL,
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS blobs(k TEXT PRIMARY KEY, data {BLOB} NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS rate_limits(k TEXT NOT NULL, w BIGINT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY(k, w));
 """
 
@@ -75,8 +76,10 @@ class Database:
             opts = {"autocommit": True, "row_factory": dict_row}
             if schema:
                 opts["options"] = f'-c search_path="{schema}"'
-            self.pool = ConnectionPool(str(target), kwargs=opts, min_size=1, max_size=10, open=True)
-            auto = "BIGSERIAL PRIMARY KEY"
+            # a serverless Postgres (Neon) drops idle connections: test one before handing it out, and recycle old ones
+            self.pool = ConnectionPool(str(target), kwargs=opts, min_size=1, max_size=10, open=True,
+                                       check=ConnectionPool.check_connection, max_lifetime=1800, reconnect_timeout=30)  # fmt: skip
+            auto, blob = "BIGSERIAL PRIMARY KEY", "BYTEA"
         else:
             Path(target).parent.mkdir(parents=True, exist_ok=True)
             self.c = sqlite3.connect(str(target), check_same_thread=False, isolation_level=None)
@@ -84,8 +87,8 @@ class Database:
             self.c.execute("PRAGMA journal_mode=WAL")
             self.c.execute("PRAGMA busy_timeout=5000")
             self.lock = threading.RLock()
-            auto = "INTEGER PRIMARY KEY AUTOINCREMENT"
-        for stmt in SCHEMA.replace("{AUTOID}", auto).split(";"):
+            auto, blob = "INTEGER PRIMARY KEY AUTOINCREMENT", "BLOB"
+        for stmt in SCHEMA.replace("{AUTOID}", auto).replace("{BLOB}", blob).split(";"):
             if stmt.strip():
                 self.x(stmt)
 

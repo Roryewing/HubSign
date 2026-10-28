@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     max_doc_mb: int = 10
     # storage: SQLite file by default; set a Postgres URL to run more than one node
     database_url: str = ""  # postgresql://user:pass@host/db
+    documents_in_database: bool = (
+        False  # keep PDFs in the database instead of on disk (hosts without a persistent disk)
+    )
     s3_bucket: str = ""  # documents go to S3-compatible storage when set (AWS creds from the usual env vars)
     s3_prefix: str = ""
     s3_endpoint_url: str = ""  # Cloudflare R2, MinIO, ...
