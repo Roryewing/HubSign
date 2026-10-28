@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>HubSign - Review and sign</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314233f'/%3E%3Cpath d='M8 21c4-9 6-9 6-3s3 3 10-5' stroke='%23ffc233' stroke-width='2.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef1f7;--surface:#fff;--ink:#0f1b33;--muted:#5b667a;--line:#dfe4ee;--brand:#14233f;--primary:#2c4bd6;--primary-h:#2340b8;--primary-ink:#fff;--accent:#ffc233;--accent-ink:#2b2100;--ok:#17794a;--ok-bg:#e3f4ea;--bad:#b92f2f;--bad-bg:#fbe7e7;--warn-bg:#fff3d6;--warn:#8a5a00;--mute-bg:#e6eaf3}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0b1122;--surface:#131c33;--ink:#e8ecf6;--muted:#9aa6bf;--line:#26324f;--brand:#080d1b;--primary:#7b92ff;--primary-h:#98a9ff;--primary-ink:#0b1122;--ok:#58d394;--ok-bg:#12332a;--bad:#ff8a8a;--bad-bg:#3a1b22;--warn-bg:#3a2f12;--warn:#ffcf70;--mute-bg:#1c2641;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#0b1122;--surface:#131c33;--ink:#e8ecf6;--muted:#9aa6bf;--line:#26324f;--brand:#080d1b;--primary:#7b92ff;--primary-h:#98a9ff;--primary-ink:#0b1122;--ok:#58d394;--ok-bg:#12332a;--bad:#ff8a8a;--bad-bg:#3a1b22;--warn-bg:#3a2f12;--warn:#ffcf70;--mute-bg:#1c2641;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,sans-serif;padding-bottom:90px}
+header{background:var(--brand);color:#fff;display:flex;align-items:center;gap:12px;padding:0 max(16px,env(safe-area-inset-left));height:54px;position:sticky;top:0;z-index:20}
+header .logo{display:flex;gap:8px;align-items:center;font-weight:700;font-size:17px}
+header .subj{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#c9d3ea;font-size:13.5px}
+.ribbon{background:var(--warn-bg);color:var(--warn);text-align:center;padding:5px 16px;font-size:12.5px;font-weight:500}
+.wrap{max-width:860px;margin:0 auto;padding:22px max(16px,env(safe-area-inset-left))}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px}
+h1{font-size:21px;margin:0 0 6px}p{margin:6px 0}.muted{color:var(--muted)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 18px;border-radius:10px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-ink)}.btn.primary:hover{background:var(--primary-h)}.btn[disabled]{opacity:.45;cursor:not-allowed}.btn.link{border:0;background:none;color:var(--muted);text-decoration:underline;padding:6px}
+input[type=text],textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:9px 11px;width:100%}
+.pdfwrap{display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:16px}
+.pg{position:relative;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.2);flex:none;max-width:100%}.pg canvas{display:block}
+.fld{position:absolute;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;cursor:pointer;overflow:hidden;color:#2b2100;user-select:none}
+.fld.todo{background:var(--accent);border:2px solid #d99a00;animation:pulse 1.6s ease-in-out infinite}.fld.done{background:rgba(23,121,74,.08);border:1.5px solid rgba(23,121,74,.45)}
+.fld.opt{background:#fff3c4;border:1.5px dashed #d99a00}.fld.fixed{background:rgba(0,0,0,.04);border:1px solid rgba(0,0,0,.15);color:#222;cursor:default;font-weight:500;font-size:12px}
+.fld img{width:100%;height:100%;object-fit:contain}.fld input[type=text]{border:0;background:transparent;height:100%;padding:0 4px;font-size:12px;color:#111;border-radius:0}.fld input[type=checkbox]{width:70%;height:70%}
+@keyframes pulse{50%{box-shadow:0 0 0 4px rgba(255,194,51,.45)}}
+@media (prefers-reduced-motion:reduce){.fld.todo{animation:none}}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:12px max(16px,env(safe-area-inset-left)) calc(12px + env(safe-area-inset-bottom,0px));display:flex;gap:12px;align-items:center;justify-content:space-between;z-index:30}
+.bar .l{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.modal{position:fixed;inset:0;background:rgba(5,10,25,.6);display:grid;place-items:center;z-index:50;padding:16px}
+.modal .box{background:var(--surface);border-radius:14px;padding:20px;width:100%;max-width:520px;max-height:92vh;overflow:auto}
+.tabs{display:flex;gap:4px;margin:10px 0}.tabs button{border:0;background:var(--mute-bg);color:var(--muted);padding:7px 16px;border-radius:8px;font:inherit;font-weight:600;cursor:pointer}.tabs button.on{background:var(--primary);color:var(--primary-ink)}
+canvas.draw{width:100%;aspect-ratio:3/1;background:#fff;border:1px dashed var(--line);border-radius:10px;touch-action:none;cursor:crosshair}
+.prev{height:120px;background:#fff;border:1px solid var(--line);border-radius:10px;display:grid;place-items:center;overflow:hidden}.prev img{max-width:100%;max-height:100%}
+.state{text-align:center;padding:40px 16px}.state .ico{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;margin:0 auto 12px;font-size:28px}
+.err{background:var(--bad-bg);color:var(--bad);padding:9px 12px;border-radius:9px;margin:10px 0;font-weight:500}
+label.chk{display:flex;gap:10px;align-items:flex-start;margin:14px 0;font-weight:500}label.chk input{margin-top:4px;width:18px;height:18px}
+</style>
+</head>
+<body>
+<header><span class="logo"><svg width="24" height="24" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#ffc233"/><path d="M8 21c4-9 6-9 6-3s3 3 10-5" stroke="#14233f" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>HubSign</span><span class="subj" id="subj"></span></header>
+<div id="ribbon"></div>
+<div class="wrap" id="root"><div class="state muted">Loading…</div></div>
+<div id="overlay"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+"use strict";
+const T=location.pathname.split("/").filter(Boolean)[1]||"";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const S={info:null,consent:false,vals:{},adopted:{signature:null,initials:null}};
+const A=p=>`/sign-api/${encodeURIComponent(T)}${p}`;
+async function call(p,body){const r=await fetch(A(p),body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{});let j=null;try{j=await r.json()}catch{}
+  if(!r.ok){const d=j&&j.detail;throw new Error(Array.isArray(d)?d.map(x=>x.msg).join("; "):d||"Something went wrong")}return j}
+
+const MESSAGES={
+  waiting:["⏳","It is not your turn yet","Another signer needs to go first. We will email you when it is ready."],
+  signed:["✓","You have signed","Thank you. Everyone else still needs to sign. You will get a copy when the document is complete."],
+  declined:["✕","This document was declined","Nobody can sign it now. Contact the sender if this was a mistake."],
+  voided:["✕","This document was cancelled","The sender cancelled it. Contact them if you think this is wrong."],
+  completed:["✓","All signatures collected","The document is complete. Download your signed copy with its certificate."]
+};
+function endState(st){
+  const [i,h,t]=MESSAGES[st];$("#overlay").innerHTML="";$("#root").innerHTML=`<div class="card state"><div class="ico" style="background:${st==="completed"||st==="signed"?"var(--ok-bg);color:var(--ok)":"var(--mute-bg);color:var(--muted)"}">${i}</div><h1>${h}</h1><p class="muted">${t}</p>${st==="completed"?`<p><a class="btn primary" href="${A("/signed")}">Download signed PDF</a></p>`:""}</div>`;
+  document.querySelector(".bar")?.remove();
+}
+
+async function start(){
+  try{S.info=await call("")}catch(e){$("#root").innerHTML=`<div class="card state"><h1>Link not found</h1><p class="muted">Check that you copied the whole link.</p></div>`;return}
+  $("#subj").textContent=S.info.subject;
+  if(S.info.sandbox)$("#ribbon").innerHTML=`<div class="ribbon">Sandbox: this is a test document and is not legally binding.</div>`;
+  if(S.info.state!=="ready")return endState(S.info.state);
+  $("#root").innerHTML=`<div class="card"><h1>${esc(S.info.subject)}</h1><p class="muted">Hi ${esc(S.info.recipient.name)}, you have been asked to review and sign this document.</p>${S.info.message?`<p style="white-space:pre-wrap;background:var(--mute-bg);padding:12px;border-radius:10px">${esc(S.info.message)}</p>`:""}
+  <label class="chk"><input type="checkbox" id="consent"><span>I agree to use electronic records and signatures, and I have read the document I am about to sign. I can decline instead.</span></label>
+  <button class="btn primary" id="go" disabled>Review and sign</button> <button class="btn link" id="dec0">Decline</button></div>`;
+  $("#consent").onchange=e=>$("#go").disabled=!e.target.checked;
+  $("#go").onclick=()=>{S.consent=true;sign()};$("#dec0").onclick=declineModal;
+}
+
+/* ---------- signing ---------- */
+const FLD={signature:"Sign",initials:"Initial",date:"Date",text:"Text",checkbox:""};
+async function sign(){
+  $("#root").innerHTML=`<div class="card" style="padding:12px 18px"><b>${esc(S.info.subject)}</b><div class="muted" style="font-size:13px">Click each highlighted field. Required fields pulse.</div></div><div class="pdfwrap" id="pdf"><div class="muted">Loading document…</div></div>`;
+  const buf=await (await fetch(A("/document"))).arrayBuffer();
+  pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise,host=$("#pdf");host.innerHTML="";
+  for(let n=1;n<=pdf.numPages;n++){
+    const p=await pdf.getPage(n),W=Math.min(800,host.clientWidth||800),v0=p.getViewport({scale:1}),sc=W/v0.width,vp=p.getViewport({scale:sc*(devicePixelRatio||1)});
+    const w=document.createElement("div");w.className="pg";w.style.width=W+"px";w.style.height=v0.height*sc+"px";w.dataset.page=n;
+    const c=document.createElement("canvas");c.width=vp.width;c.height=vp.height;c.style.cssText="width:100%;height:100%";w.appendChild(c);host.appendChild(w);
+    await p.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;
+    S.info.fields.filter(f=>f.page===n).forEach(f=>w.appendChild(fieldEl(f)));
+  }
+  bar();update();
+}
+function fieldEl(f){
+  const d=document.createElement("div");d.className="fld";d.id="f_"+f.id;d.style.cssText=`left:${f.x*100}%;top:${f.y*100}%;width:${f.w*100}%;height:${f.h*100}%`;
+  d.onclick=()=>fieldClick(f);return d;
+}
+function fieldClick(f){
+  if(f.type==="signature"||f.type==="initials"){adoptModal(f.type,url=>{S.adopted[f.type]=url;S.vals[f.id]=url;update()});}
+  else if(f.type==="checkbox"){S.vals[f.id]=!S.vals[f.id];update()}
+}
+function update(){
+  let left=0;const today=new Date().toISOString().slice(0,10);
+  S.info.fields.forEach(f=>{
+    const d=$("#f_"+f.id);if(!d)return;const v=S.vals[f.id];let html="",cls="fld";
+    if(f.type==="signature"||f.type==="initials")html=v?`<img alt="${f.type}" src="${v}">`:FLD[f.type];
+    else if(f.type==="date"){cls+=" fixed";html=today}
+    else if(f.type==="checkbox")html=`<input type="checkbox" ${v?"checked":""} aria-label="checkbox">`;
+    else html=`<input type="text" maxlength="500" value="${esc(v||"")}" aria-label="${esc(f.label||"text")}" placeholder="${esc(f.label||"Type here")}">`;
+    const filled=f.type==="date"||!!v;
+    if(f.required&&!filled)left++;
+    if(!cls.includes("fixed"))cls+=filled?" done":(f.required?" todo":" opt");
+    d.className=cls;
+    if(f.type==="text"){if(!d.querySelector("input")){d.innerHTML=html;const i=d.querySelector("input");i.oninput=()=>{S.vals[f.id]=i.value;refresh()};i.onclick=e=>e.stopPropagation()}}
+    else{d.innerHTML=html;if(f.type==="checkbox"){const i=d.querySelector("input");i.onclick=e=>{e.stopPropagation();S.vals[f.id]=i.checked;update()}}}
+  });
+  S.left=left;refresh();
+}
+function refresh(){
+  let left=0;S.info.fields.forEach(f=>{if(f.required&&f.type!=="date"&&!(S.vals[f.id]&&String(S.vals[f.id]).trim()))left++});
+  S.left=left;const b=$("#fin");if(b)b.disabled=left>0;const t=$("#left");if(t)t.textContent=left?`${left} required field${left>1?"s":""} left`:"Ready to finish";
+}
+function bar(){
+  const el=document.createElement("div");el.className="bar";el.innerHTML=`<div class="l"><b id="left"></b><button class="btn" id="nxt">Next field</button></div><div class="l"><button class="btn link" id="dec">Decline</button><button class="btn primary" id="fin" disabled>Finish</button></div>`;document.body.appendChild(el);
+  $("#nxt").onclick=()=>{const f=S.info.fields.find(f=>f.required&&f.type!=="date"&&!(S.vals[f.id]&&String(S.vals[f.id]).trim()));if(f){const d=$("#f_"+f.id);d.scrollIntoView({behavior:"smooth",block:"center"});if(f.type==="text")d.querySelector("input")?.focus()}};
+  $("#dec").onclick=declineModal;
+  $("#fin").onclick=async()=>{$("#fin").disabled=true;try{const r=await call("/complete",{consent:true,values:S.vals});endState(r.state==="completed"?"completed":"signed")}catch(e){$("#fin").disabled=false;alert2(e.message)}};
+}
+function alert2(msg){let el=$("#oops");if(!el){el=document.createElement("div");el.id="oops";el.className="err";el.style.cssText="position:fixed;left:16px;right:16px;bottom:84px;z-index:60;max-width:560px;margin:0 auto";document.body.appendChild(el)}el.textContent=msg;setTimeout(()=>el.remove(),6000)}
+
+/* ---------- adopt signature ---------- */
+function adoptModal(kind,done){
+  const init=kind==="initials",W=init?240:600,H=200,name=S.info.recipient.name,txt=init?name.split(/\s+/).map(w=>w[0]||"").join("").toUpperCase().slice(0,4):name;
+  let mode="type",drawn=false;
+  $("#overlay").innerHTML=`<div class="modal"><div class="box"><h1>${init?"Adopt your initials":"Adopt your signature"}</h1><div class="tabs"><button data-m="type" class="on">Type</button><button data-m="draw">Draw</button></div>
+  <div id="pane"></div><p class="muted" style="font-size:12.5px">By selecting Adopt, you agree this is a legal representation of your ${init?"initials":"signature"}.</p>
+  <div style="display:flex;gap:10px;justify-content:flex-end"><button class="btn" id="cx">Cancel</button><button class="btn primary" id="ok">Adopt</button></div></div></div>`;
+  const out=document.createElement("canvas");out.width=W;out.height=H;
+  const typed=()=>{const x=out.getContext("2d");x.clearRect(0,0,W,H);const v=($("#tv")?.value||"").trim();if(!v)return null;let px=130;x.fillStyle="#0b1f66";x.textBaseline="middle";x.textAlign="center";
+    do{x.font=`600 ${px}px "Dancing Script",cursive`;px-=4}while(x.measureText(v).width>W-30&&px>20);x.fillText(v,W/2,H/2);return out.toDataURL("image/png")};
+  const pane=()=>{
+    if(mode==="type"){$("#pane").innerHTML=`<input type="text" id="tv" maxlength="60" value="${esc(txt)}" aria-label="Your ${init?"initials":"name"}"><div class="prev" style="margin-top:10px"><img id="pv" alt="preview"></div>`;
+      const pv=()=>{const u=typed();$("#pv").src=u||"";};$("#tv").oninput=pv;(document.fonts?document.fonts.load('600 40px "Dancing Script"').catch(()=>{}):Promise.resolve()).then(pv)}
+    else{$("#pane").innerHTML=`<canvas class="draw" id="dc" width="${W}" height="${H}"></canvas><button class="btn link" id="clr">Clear</button>`;
+      const c=$("#dc"),x=c.getContext("2d");x.lineWidth=init?6:5;x.lineCap=x.lineJoin="round";x.strokeStyle="#0b1f66";let down=false;drawn=false;
+      const pt=e=>{const r=c.getBoundingClientRect();return[(e.clientX-r.left)*W/r.width,(e.clientY-r.top)*H/r.height]};
+      c.onpointerdown=e=>{down=true;c.setPointerCapture(e.pointerId);const[a,b]=pt(e);x.beginPath();x.moveTo(a,b);x.lineTo(a+.1,b+.1);x.stroke();drawn=true};
+      c.onpointermove=e=>{if(!down)return;const[a,b]=pt(e);x.lineTo(a,b);x.stroke()};c.onpointerup=()=>down=false;
+      $("#clr").onclick=()=>{x.clearRect(0,0,W,H);drawn=false}}
+  };
+  document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{mode=b.dataset.m;document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x===b));pane()});
+  pane();$("#cx").onclick=()=>$("#overlay").innerHTML="";
+  $("#ok").onclick=()=>{const u=mode==="type"?typed():(drawn?$("#dc").toDataURL("image/png"):null);if(!u)return;$("#overlay").innerHTML="";done(u)};
+}
+function declineModal(){
+  $("#overlay").innerHTML=`<div class="modal"><div class="box"><h1>Decline to sign</h1><p class="muted">The sender will be told, and nobody will be able to sign this document.</p><textarea id="why" rows="3" maxlength="300" placeholder="Reason (optional)"></textarea><div id="de"></div><div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px"><button class="btn" id="cx">Back</button><button class="btn primary" id="dok">Decline</button></div></div></div>`;
+  $("#cx").onclick=()=>$("#overlay").innerHTML="";
+  $("#dok").onclick=async()=>{try{await call("/decline",{reason:$("#why").value});endState("declined")}catch(e){$("#de").innerHTML=`<div class="err">${esc(e.message)}</div>`}};
+}
+start();
+</script>
+</body>
+</html>

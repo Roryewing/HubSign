@@ -1,0 +1,9 @@
+services:
+  hubsign:
+    build: .
+    ports: ["8000:8000"]
+    env_file: [.env]
+    volumes: ["hubsign-data:/data"]
+    restart: unless-stopped
+volumes:
+  hubsign-data:

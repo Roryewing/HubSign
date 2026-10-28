@@ -1,0 +1,21 @@
+# Render blueprint. Documents and the database live on disk, so this needs a paid plan with a
+# persistent disk; the free plan loses everything on every restart and is not suitable.
+services:
+  - type: web
+    name: hubsign
+    runtime: docker
+    plan: starter
+    region: ohio
+    healthCheckPath: /api/ping
+    autoDeploy: true
+    disk:
+      name: hubsign-data
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      - key: HUBSIGN_BASE_URL
+        sync: false # set to the service URL after the first deploy, e.g. https://hubsign.onrender.com
+      - key: HUBSIGN_ALLOW_SIGNUP
+        value: "false" # first account is always allowed; this closes registration after it
+      - key: HUBSIGN_SECRET
+        generateValue: true

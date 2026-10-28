@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HubSign</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314233f'/%3E%3Cpath d='M8 21c4-9 6-9 6-3s3 3 10-5' stroke='%23ffc233' stroke-width='2.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f4f6fa;--surface:#fff;--ink:#0f1b33;--muted:#5b667a;--line:#e0e5ee;--brand:#14233f;--brand-ink:#fff;--primary:#2c4bd6;--primary-h:#2340b8;--primary-ink:#fff;--accent:#ffc233;--ok:#17794a;--ok-bg:#e3f4ea;--bad:#b92f2f;--bad-bg:#fbe7e7;--warn:#8a5a00;--warn-bg:#fff3d6;--info-bg:#e6ecff;--info:#2340b8;--mute-bg:#eceff5;--code:#0d1730;--code-ink:#dfe7ff;--shadow:0 1px 2px rgba(15,27,51,.06),0 4px 14px rgba(15,27,51,.06)}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0b1122;--surface:#131c33;--ink:#e8ecf6;--muted:#9aa6bf;--line:#26324f;--brand:#080d1b;--primary:#7b92ff;--primary-h:#98a9ff;--primary-ink:#0b1122;--ok:#58d394;--ok-bg:#12332a;--bad:#ff8a8a;--bad-bg:#3a1b22;--warn:#ffcf70;--warn-bg:#3a2f12;--info-bg:#1b2750;--info:#a9b8ff;--mute-bg:#1c2641;--code:#070c1a;--shadow:none;color-scheme:dark}}
+:root[data-theme=dark]{--bg:#0b1122;--surface:#131c33;--ink:#e8ecf6;--muted:#9aa6bf;--line:#26324f;--brand:#080d1b;--primary:#7b92ff;--primary-h:#98a9ff;--primary-ink:#0b1122;--ok:#58d394;--ok-bg:#12332a;--bad:#ff8a8a;--bad-bg:#3a1b22;--warn:#ffcf70;--warn-bg:#3a2f12;--info-bg:#1b2750;--info:#a9b8ff;--mute-bg:#1c2641;--code:#070c1a;--shadow:none;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;padding-left:max(0px,env(safe-area-inset-left));padding-right:max(0px,env(safe-area-inset-right))}
+a{color:var(--primary);text-decoration:none}a:hover{text-decoration:underline}
+h1{font-size:22px;margin:0;letter-spacing:-.01em}h2{font-size:16px;margin:0 0 4px}h3{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.mono,code,pre{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:12.5px}
+nav.top{background:var(--brand);color:var(--brand-ink);display:flex;align-items:center;gap:6px;padding:0 max(16px,env(safe-area-inset-left));height:56px;position:sticky;top:0;z-index:20;flex-wrap:wrap}
+nav.top .logo{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.01em;margin-right:18px;color:#fff;text-decoration:none}
+nav.top a.nl{color:#c9d3ea;padding:8px 12px;border-radius:8px;font-weight:500}
+nav.top a.nl.on,nav.top a.nl:hover{background:rgba(255,255,255,.1);color:#fff;text-decoration:none}
+.sp{flex:1}
+.seg{display:inline-flex;background:rgba(255,255,255,.1);border-radius:9px;padding:3px}
+.seg button{background:none;border:0;color:#c9d3ea;padding:5px 12px;border-radius:7px;font:inherit;font-weight:600;cursor:pointer}
+.seg button.on{background:var(--accent);color:#2b2100}
+.banner{background:var(--warn-bg);color:var(--warn);text-align:center;padding:6px 16px;font-size:12.5px;font-weight:500}
+main{max-width:1120px;margin:0 auto;padding:26px max(16px,env(safe-area-inset-left))}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.sub{color:var(--muted);margin:2px 0 0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:18px;min-width:0}
+.card+.card{margin-top:16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:760px){.grid2,.grid3{grid-template-columns:1fr}}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;border-radius:9px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none!important}
+.btn:hover{border-color:var(--primary)}.btn.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-ink)}.btn.primary:hover{background:var(--primary-h)}
+.btn.danger{color:var(--bad)}.btn.sm{padding:4px 10px;font-size:12.5px}.btn[disabled]{opacity:.45;cursor:not-allowed}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:8px 10px;width:100%;min-width:0}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--primary);outline-offset:-1px}
+label.f{display:flex;flex-direction:column;gap:4px;font-weight:600;font-size:12.5px;color:var(--muted)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+table{border-collapse:collapse;width:100%}th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:top}tr:last-child td{border-bottom:0}tbody tr.click{cursor:pointer}tbody tr.click:hover{background:var(--mute-bg)}
+.scroll{overflow-x:auto}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11.5px;font-weight:600;background:var(--mute-bg);color:var(--muted);white-space:nowrap}
+.pill.sent,.pill.viewed{background:var(--info-bg);color:var(--info)}.pill.completed,.pill.signed,.pill.delivered{background:var(--ok-bg);color:var(--ok)}
+.pill.declined,.pill.failed{background:var(--bad-bg);color:var(--bad)}.pill.retrying,.pill.pending{background:var(--warn-bg);color:var(--warn)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;overflow-x:auto}
+.tabs a{padding:9px 14px;color:var(--muted);font-weight:600;border-bottom:2px solid transparent;white-space:nowrap}.tabs a.on{color:var(--ink);border-color:var(--primary);text-decoration:none}
+.empty{text-align:center;padding:44px 16px;color:var(--muted)}
+.err{background:var(--bad-bg);color:var(--bad);padding:9px 12px;border-radius:9px;margin:10px 0;font-weight:500}
+.ok{background:var(--ok-bg);color:var(--ok);padding:9px 12px;border-radius:9px;margin:10px 0;font-weight:500}
+pre{background:var(--code);color:var(--code-ink);padding:14px;border-radius:10px;overflow-x:auto;margin:8px 0;white-space:pre}
+.kbd{background:var(--mute-bg);border-radius:6px;padding:1px 6px}
+.steps{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+.step{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:99px;background:var(--mute-bg);color:var(--muted);font-weight:600}
+.step b{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--surface);font-size:11px}
+.step.on{background:var(--primary);color:var(--primary-ink)}.step.on b{color:var(--primary)}.step.done b{background:var(--ok);color:#fff}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.auth{max-width:400px;margin:9vh auto;padding:0 16px}
+.auth .logo{display:flex;gap:10px;align-items:center;font-weight:700;font-size:24px;margin-bottom:6px}
+.tl{list-style:none;margin:0;padding:0}.tl li{display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)}.tl li:last-child{border:0}.tl time{color:var(--muted);width:150px;flex:none;font-size:12.5px}
+.pdfwrap{display:flex;flex-direction:column;align-items:center;gap:14px;background:var(--mute-bg);padding:16px;border-radius:12px;overflow:auto;max-height:78vh}
+.pg{position:relative;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.18);cursor:crosshair;flex:none}.pg canvas{display:block}
+.fb{position:absolute;border:2px solid;border-radius:4px;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;color:#111}
+.fb:hover::after{content:"×";position:absolute;top:-1px;right:3px;font-size:14px}
+.copy{cursor:pointer}
+.tools{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}.tools label.f{min-width:150px}
+@media(max-width:620px){.tl time{width:96px}nav.top .logo{margin-right:6px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const lsGet=(k,d)=>{try{return localStorage.getItem(k)??d}catch{return d}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch{}};
+const state={me:null,mode:lsGet("hs_mode","test"),composer:null};
+const COLORS=["#ffd966","#9fd8ff","#b7f0b1","#ffb3c7","#d4b8ff","#ffc999"];
+const SIZE={signature:[.25,.06],initials:[.08,.05],date:[.15,.03],text:[.25,.03],checkbox:[.025,.02]};
+const TYPES={signature:"Signature",initials:"Initials",date:"Date signed",text:"Text",checkbox:"Checkbox"};
+const when=t=>t?new Date(t).toLocaleString([], {dateStyle:"medium",timeStyle:"short"}):"";
+const pill=s=>`<span class="pill ${esc(s)}">${esc(s)}</span>`;
+const copyText=async t=>{try{await navigator.clipboard.writeText(t);return true}catch{return false}};
+
+async function api(path,opt={}){
+  const o={credentials:"same-origin",...opt,headers:{"X-HubSign-Mode":state.mode,...(opt.body?{"Content-Type":"application/json"}:{}),...(opt.headers||{})}};
+  if(opt.body&&typeof opt.body!=="string")o.body=JSON.stringify(opt.body);
+  const r=await fetch(path,o);
+  if(r.status===204)return null;
+  let j=null;try{j=await r.json()}catch{}
+  if(!r.ok){
+    if(r.status===401&&!path.startsWith("/auth/")){state.me=null;route()}
+    const d=j&&j.detail;
+    throw new Error(Array.isArray(d)?d.map(x=>(x.loc||[]).slice(1).join(".")+": "+x.msg).join("; "):d||r.statusText);
+  }
+  return j;
+}
+const flash=(msg,bad)=>{const el=$("#flash");if(el){el.innerHTML=msg?`<div class="${bad?"err":"ok"}">${esc(msg)}</div>`:""}};
+
+/* ---------- shell ---------- */
+function shell(active,inner){
+  const nav=[["envelopes","Envelopes"],["new","New envelope"],["developer","Developer"]];
+  return `<nav class="top"><a class="logo" href="#envelopes"><svg width="26" height="26" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#ffc233"/><path d="M8 21c4-9 6-9 6-3s3 3 10-5" stroke="#14233f" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>HubSign</a>
+  ${nav.map(([k,l])=>`<a class="nl ${active===k?"on":""}" href="#${k}">${l}</a>`).join("")}
+  <span class="sp"></span>
+  <span class="seg" title="Sandbox documents are watermarked and not legally binding"><button data-mode="test" class="${state.mode==="test"?"on":""}">Sandbox</button><button data-mode="live" class="${state.mode==="live"?"on":""}">Live</button></span>
+  <a class="nl" href="#" id="logout" title="${esc(state.me.email)}">Sign out</a></nav>
+  ${state.mode==="test"?`<div class="banner">Sandbox mode: documents are watermarked, nothing here is legally binding, and signing links are returned to you instead of relying on email.</div>`:""}
+  <main><div id="flash"></div>${inner}</main>`;
+}
+function bindShell(){
+  document.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{state.mode=b.dataset.mode;lsSet("hs_mode",state.mode);state.composer=null;route()});
+  $("#logout").onclick=async e=>{e.preventDefault();await api("/auth/logout",{method:"POST"}).catch(()=>{});state.me=null;route()};
+}
+
+/* ---------- auth ---------- */
+function authView(signup){
+  $("#app").innerHTML=`<div class="auth"><div class="logo"><svg width="34" height="34" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#14233f"/><path d="M8 21c4-9 6-9 6-3s3 3 10-5" stroke="#ffc233" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>HubSign</div>
+  <p class="sub">${signup?"Create your account":"Sign in to send and track documents"}</p><div class="card" style="margin-top:16px"><form id="af" class="row" style="flex-direction:column;align-items:stretch;gap:12px">
+  ${signup?`<label class="f">Name<input name="name" autocomplete="name"></label>`:""}
+  <label class="f">Email<input name="email" type="email" required autocomplete="username"></label>
+  <label class="f">Password${signup?" (8+ characters)":""}<input name="password" type="password" required minlength="8" autocomplete="${signup?"new-password":"current-password"}"></label>
+  <div id="flash"></div><button class="btn primary" style="justify-content:center">${signup?"Create account":"Sign in"}</button></form></div>
+  <p class="sub" style="text-align:center;margin-top:14px">${signup?"Have an account?":"New here?"} <a href="#" id="swap">${signup?"Sign in":"Create an account"}</a></p></div>`;
+  $("#swap").onclick=e=>{e.preventDefault();authView(!signup)};
+  $("#af").onsubmit=async e=>{e.preventDefault();const f=Object.fromEntries(new FormData(e.target));
+    try{await api(signup?"/auth/signup":"/auth/login",{method:"POST",body:f});state.me=await api("/auth/me");location.hash="#envelopes";route()}catch(x){flash(x.message,true)}};
+}
+
+/* ---------- envelopes list ---------- */
+const FILTERS=[["","All"],["sent","Waiting"],["completed","Completed"],["draft","Drafts"],["declined","Declined"],["voided","Voided"]];
+async function listView(filter=""){
+  const d=await api("/v1/envelopes"+(filter?`?status=${filter}`:""));
+  const rows=d.envelopes;
+  $("#app").innerHTML=shell("envelopes",`<div class="head"><div><h1>Envelopes</h1><p class="sub">${state.mode==="test"?"Sandbox":"Live"} documents you have sent</p></div><a class="btn primary" href="#new">+ New envelope</a></div>
+  <div class="tabs">${FILTERS.map(([k,l])=>`<a href="#envelopes/${k}" class="${k===filter?"on":""}">${l}</a>`).join("")}</div>
+  <div class="card scroll" style="padding:0">${rows.length?`<table><thead><tr><th>Subject</th><th>Recipients</th><th>Status</th><th>Updated</th></tr></thead><tbody>${rows.map(e=>`<tr class="click" data-id="${esc(e.id)}"><td><b>${esc(e.subject)}</b><div class="mono sub">${esc(e.id)}</div></td><td>${e.recipients.map(r=>`<div>${esc(r.name)} ${pill(r.status)}</div>`).join("")}</td><td>${pill(e.status)}</td><td>${esc(when(e.updated_at))}</td></tr>`).join("")}</tbody></table>`:`<div class="empty"><h2>Nothing here yet</h2><p>Upload a PDF, add signers and drop fields on the page.</p><a class="btn primary" href="#new">Create your first envelope</a></div>`}</div>`);
+  bindShell();document.querySelectorAll("tr.click").forEach(tr=>tr.onclick=()=>location.hash="#env/"+tr.dataset.id);
+}
+
+/* ---------- envelope detail ---------- */
+async function detailView(id){
+  const [e,ev]=await Promise.all([api("/v1/envelopes/"+id),api(`/v1/envelopes/${id}/events`)]);
+  const q=`?mode=${state.mode}`,fcount=r=>e.fields.filter(f=>f.recipient_id===r.id).length;
+  $("#app").innerHTML=shell("envelopes",`<div class="head"><div><a href="#envelopes">← Envelopes</a><h1 style="margin-top:6px">${esc(e.subject)} ${pill(e.status)}</h1><p class="sub mono">${esc(e.id)}</p></div>
+  <div class="row">${e.status==="draft"?`<button class="btn primary" id="send">Send</button><button class="btn danger" id="del">Delete draft</button>`:""}${e.status==="sent"?`<button class="btn danger" id="void">Void</button>`:""}
+  <a class="btn" href="/v1/envelopes/${id}/document${q}">Original PDF</a>${e.status==="completed"?`<a class="btn primary" href="/v1/envelopes/${id}/signed${q}">Signed PDF + certificate</a>`:""}</div></div>
+  <div class="grid2"><div class="card"><h3>Recipients</h3><div class="scroll"><table><tbody>${e.recipients.map(r=>`<tr><td><b>${esc(r.name)}</b><div class="sub">${esc(r.email)}</div></td><td>${esc(r.role)} · step ${r.routing_order}${r.role==="signer"?` · ${fcount(r)} fields`:""}</td><td>${pill(r.status)}${r.signing_url?`<div style="margin-top:6px"><a href="${esc(r.signing_url)}" target="_blank" rel="noopener">Open</a> · <a class="copy" data-url="${esc(r.signing_url)}">Copy link</a></div>`:""}</td></tr>`).join("")}</tbody></table></div>
+  <p class="sub" style="margin-top:10px">${e.sequential?"Signers sign in order.":"All signers can sign at once."} Signing links appear when it is a signer's turn.</p></div>
+  <div class="card"><h3>Document</h3><p style="margin:8px 0 2px"><b>${esc(e.document.name)}</b> · ${e.document.pages} pages</p><p class="mono sub" style="word-break:break-all">SHA-256 ${esc(e.document.sha256)}</p>${e.final_sha256?`<p class="mono sub" style="word-break:break-all">Signed copy SHA-256 ${esc(e.final_sha256)}</p>`:""}
+  ${Object.keys(e.metadata).length?`<h3 style="margin-top:12px">Metadata</h3><pre>${esc(JSON.stringify(e.metadata,null,2))}</pre>`:""}</div></div>
+  <div class="card"><h3 style="margin-bottom:6px">Activity</h3><ul class="tl">${ev.events.slice().reverse().map(x=>`<li><time>${esc(when(x.ts))}</time><div><b>${esc(x.type.replace("_"," "))}</b> <span class="sub">${esc(x.actor)}${x.ip?" · "+esc(x.ip):""}</span>${x.detail?`<div class="sub">${esc(x.detail)}</div>`:""}</div></li>`).join("")}</ul></div>`);
+  bindShell();
+  document.querySelectorAll(".copy").forEach(a=>a.onclick=async()=>{a.textContent=(await copyText(a.dataset.url))?"Copied":"Select & copy: "+a.dataset.url});
+  const act=(sel,fn)=>{const b=$(sel);if(b)b.onclick=async()=>{try{await fn();detailView(id)}catch(x){flash(x.message,true)}}};
+  act("#send",()=>api(`/v1/envelopes/${id}/send`,{method:"POST"}));
+  act("#void",async()=>{const reason=prompt?.("Reason for voiding (optional)")??"";await api(`/v1/envelopes/${id}/void`,{method:"POST",body:{reason:reason||""}})});
+  const d=$("#del");if(d)d.onclick=async()=>{if(d.dataset.sure!=="1"){d.dataset.sure="1";d.textContent="Click again to delete";return}try{await api("/v1/envelopes/"+id,{method:"DELETE"});location.hash="#envelopes"}catch(x){flash(x.message,true)}};
+}
+
+/* ---------- pdf rendering ---------- */
+async function renderPdf(host,bytes,onPage){
+  pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  const pdf=await pdfjsLib.getDocument({data:bytes.slice(0)}).promise;
+  host.innerHTML="";const pages=[];
+  for(let n=1;n<=pdf.numPages;n++){
+    const p=await pdf.getPage(n),W=Math.min(760,host.clientWidth-40||760),vp0=p.getViewport({scale:1}),sc=W/vp0.width,vp=p.getViewport({scale:sc*(devicePixelRatio||1)});
+    const wrap=document.createElement("div");wrap.className="pg";wrap.dataset.page=n;wrap.style.width=W+"px";wrap.style.height=(vp0.height*sc)+"px";
+    const c=document.createElement("canvas");c.width=vp.width;c.height=vp.height;c.style.width="100%";c.style.height="100%";wrap.appendChild(c);host.appendChild(wrap);
+    await p.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;pages.push(wrap);onPage&&onPage(wrap,n);
+  }
+  return pages;
+}
+const b64=buf=>{let s="";const a=new Uint8Array(buf);for(let i=0;i<a.length;i+=0x8000)s+=String.fromCharCode.apply(null,a.subarray(i,i+0x8000));return btoa(s)};
+
+/* ---------- composer ---------- */
+function newComposer(){return {step:1,bytes:null,name:"",subject:"",message:"",sequential:true,recipients:[{name:"",email:"",role:"signer",routing_order:1}],fields:[],tool:{recipient:0,type:"signature"},pages:0}}
+function composerView(){
+  const c=state.composer=state.composer||newComposer();
+  const steps=["Document","Recipients","Fields","Review"];
+  const signers=()=>c.recipients.map((r,i)=>({...r,i})).filter(r=>r.role==="signer");
+  const body={
+    1:()=>`<div class="card"><div class="grid2"><div><label class="f">PDF document<input type="file" id="file" accept="application/pdf,.pdf"></label>${c.bytes?`<p class="ok">${esc(c.name)} loaded, ${c.pages} page${c.pages>1?"s":""}.</p>`:`<p class="sub">Up to 10 MB. Unencrypted PDFs only.</p>`}</div>
+      <div class="row" style="flex-direction:column;align-items:stretch;gap:12px"><label class="f">Email subject<input id="subject" value="${esc(c.subject)}" maxlength="200" placeholder="Please sign: Equipment lease"></label><label class="f">Message to recipients<textarea id="message" rows="4" maxlength="2000">${esc(c.message)}</textarea></label></div></div></div>`,
+    2:()=>`<div class="card"><div class="scroll"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Order</th><th></th></tr></thead><tbody>${c.recipients.map((r,i)=>`<tr><td><span class="dot" style="background:${COLORS[i%6]}"></span><input style="width:calc(100% - 18px)" data-r="${i}" data-k="name" value="${esc(r.name)}" placeholder="Full name"></td><td><input data-r="${i}" data-k="email" type="email" value="${esc(r.email)}" placeholder="name@company.com"></td><td><select data-r="${i}" data-k="role"><option value="signer" ${r.role==="signer"?"selected":""}>Signer</option><option value="cc" ${r.role==="cc"?"selected":""}>Gets a copy</option></select></td><td style="width:90px"><input data-r="${i}" data-k="routing_order" type="number" min="1" max="20" value="${r.routing_order}"></td><td>${c.recipients.length>1?`<button class="btn sm danger" data-rm="${i}">Remove</button>`:""}</td></tr>`).join("")}</tbody></table></div>
+      <div class="row" style="margin-top:12px;justify-content:space-between"><button class="btn sm" id="addr">+ Add recipient</button><label class="row" style="gap:8px"><input type="checkbox" id="seq" style="width:auto" ${c.sequential?"checked":""}> Signers sign in order (by Order number)</label></div></div>`,
+    3:()=>`<div class="card"><div class="tools"><label class="f">Place for<select id="trec">${signers().map(r=>`<option value="${r.i}" ${c.tool.recipient===r.i?"selected":""}>${esc(r.name||"Recipient "+(r.i+1))}</option>`).join("")}</select></label>
+      <label class="f">Field<select id="ttype">${Object.entries(TYPES).map(([k,l])=>`<option value="${k}" ${c.tool.type===k?"selected":""}>${l}</option>`).join("")}</select></label><span class="sub" style="padding-bottom:9px">Click the page to place. Click a placed field to remove it.</span></div><div class="pdfwrap" id="pdf"><span class="sub">Rendering…</span></div></div>`,
+    4:()=>`<div class="card"><h2>${esc(c.subject)}</h2><p class="sub">${esc(c.name)} · ${c.pages} pages · ${c.sequential?"signing in order":"all at once"}</p><table><tbody>${c.recipients.map((r,i)=>`<tr><td><span class="dot" style="background:${COLORS[i%6]}"></span><b>${esc(r.name)}</b> <span class="sub">${esc(r.email)}</span></td><td>${esc(r.role)} · step ${r.routing_order}</td><td>${r.role==="signer"?c.fields.filter(f=>f.recipient===i).map(f=>TYPES[f.type]).join(", ")||'<span style="color:var(--bad)">no fields</span>':""}</td></tr>`).join("")}</tbody></table>
+      <div id="flash"></div><div class="row" style="margin-top:12px"><button class="btn" id="draft">Save as draft</button><button class="btn primary" id="sendnow">Send for signature</button></div></div>`
+  };
+  $("#app").innerHTML=shell("new",`<div class="head"><div><h1>New envelope</h1><p class="sub">${state.mode==="test"?"Sandbox":"Live"} mode</p></div><button class="btn sm" id="reset">Start over</button></div>
+  <div class="steps">${steps.map((s,i)=>`<span class="step ${c.step===i+1?"on":c.step>i+1?"done":""}"><b>${c.step>i+1?"✓":i+1}</b>${s}</span>`).join("")}</div>${body[c.step]()}
+  ${c.step<4?`<div class="row" style="margin-top:16px;justify-content:space-between"><button class="btn" id="back" ${c.step===1?"disabled":""}>Back</button><button class="btn primary" id="next">Next</button></div>`:`<div style="margin-top:16px"><button class="btn" id="back">Back</button></div>`}`);
+  bindShell();
+  $("#reset").onclick=()=>{state.composer=null;composerView()};
+  const back=$("#back");back.onclick=()=>{c.step--;composerView()};
+  const go=n=>{c.step=n;composerView()};
+  if(c.step===1){
+    $("#file").onchange=async e=>{const f=e.target.files[0];if(!f)return;if(f.size>10*1048576)return flash("That file is over 10 MB",true);
+      try{const buf=await f.arrayBuffer();const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;c.bytes=buf;c.name=f.name;c.pages=pdf.numPages;c.fields=[];c.subject=c.subject||"Please sign: "+f.name.replace(/\.pdf$/i,"");composerView()}catch{flash("That file could not be read as a PDF",true)}};
+    $("#next").onclick=()=>{c.subject=$("#subject").value.trim();c.message=$("#message").value;if(!c.bytes)return flash("Choose a PDF first",true);if(!c.subject)return flash("Add a subject",true);go(2)};
+  }
+  if(c.step===2){
+    const sync=()=>document.querySelectorAll("[data-r]").forEach(i=>{const r=c.recipients[+i.dataset.r];r[i.dataset.k]=i.dataset.k==="routing_order"?Math.max(1,+i.value||1):i.value});
+    $("#addr").onclick=()=>{sync();c.recipients.push({name:"",email:"",role:"signer",routing_order:c.recipients.length+1});composerView()};
+    document.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{sync();const i=+b.dataset.rm;c.recipients.splice(i,1);c.fields=c.fields.filter(f=>f.recipient!==i).map(f=>({...f,recipient:f.recipient>i?f.recipient-1:f.recipient}));composerView()});
+    $("#next").onclick=()=>{sync();c.sequential=$("#seq").checked;
+      if(c.recipients.some(r=>!r.name.trim()||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(r.email)))return flash("Every recipient needs a name and a valid email",true);
+      if(!c.recipients.some(r=>r.role==="signer"))return flash("Add at least one signer",true);
+      c.fields=c.fields.filter(f=>c.recipients[f.recipient]?.role==="signer");c.tool.recipient=signers()[0].i;go(3)};
+  }
+  if(c.step===3){
+    $("#trec").onchange=e=>c.tool.recipient=+e.target.value;$("#ttype").onchange=e=>c.tool.type=e.target.value;
+    const draw=wrap=>{wrap.querySelectorAll(".fb").forEach(x=>x.remove());
+      c.fields.forEach((f,idx)=>{if(f.page!==+wrap.dataset.page)return;const b=document.createElement("div");b.className="fb";b.style.cssText=`left:${f.x*100}%;top:${f.y*100}%;width:${f.w*100}%;height:${f.h*100}%;background:${COLORS[f.recipient%6]}cc;border-color:${COLORS[f.recipient%6]}`;b.textContent=TYPES[f.type];
+        b.onclick=e=>{e.stopPropagation();c.fields.splice(idx,1);drawAll()};wrap.appendChild(b)})};
+    let pages=[];const drawAll=()=>pages.forEach(draw);
+    renderPdf($("#pdf"),new Uint8Array(c.bytes),(wrap)=>{
+      wrap.onclick=e=>{const r=wrap.getBoundingClientRect(),[w,h]=SIZE[c.tool.type];
+        const x=Math.min(Math.max((e.clientX-r.left)/r.width-w/2,0),1-w),y=Math.min(Math.max((e.clientY-r.top)/r.height-h/2,0),1-h);
+        c.fields.push({recipient:c.tool.recipient,type:c.tool.type,page:+wrap.dataset.page,x:+x.toFixed(4),y:+y.toFixed(4),w,h,required:true});drawAll()};
+      pages.push(wrap);draw(wrap)}).catch(()=>flash("Could not render the PDF",true));
+    $("#next").onclick=()=>{const missing=signers().find(r=>!c.fields.some(f=>f.recipient===r.i&&["signature","initials"].includes(f.type)));
+      if(missing)return flash(`${missing.name||"A signer"} needs at least one signature or initials field`,true);go(4)};
+  }
+  if(c.step===4){
+    const submit=async send=>{try{const r=await api("/v1/envelopes",{method:"POST",body:{subject:c.subject,message:c.message,document_base64:b64(c.bytes),document_name:c.name,recipients:c.recipients.map(r=>({...r,name:r.name.trim()})),fields:c.fields,sequential:c.sequential,send}});state.composer=null;location.hash="#env/"+r.id}catch(x){flash(x.message,true)}};
+    $("#draft").onclick=()=>submit(false);$("#sendnow").onclick=()=>submit(true);
+  }
+}
+
+/* ---------- developer ---------- */
+async function developerView(tab="keys"){
+  const tabs=[["keys","API keys"],["webhooks","Webhooks"],["docs","Reference"]];
+  $("#app").innerHTML=shell("developer",`<div class="head"><div><h1>Developer</h1><p class="sub">Send and track envelopes from your own software</p></div><div class="row"><a class="btn" href="/docs" target="_blank">Interactive API explorer</a><a class="btn" href="/redoc" target="_blank">ReDoc</a></div></div>
+  <div class="tabs">${tabs.map(([k,l])=>`<a href="#developer/${k}" class="${k===tab?"on":""}">${l}</a>`).join("")}</div><div id="dev"></div>`);
+  bindShell();
+  ({keys:keysTab,webhooks:hooksTab,docs:docsTab}[tab]||keysTab)();
+}
+async function keysTab(){
+  const {keys}=await api("/v1/api-keys");
+  $("#dev").innerHTML=`<div class="card"><h2>Create a key</h2><p class="sub">Test keys (<span class="mono">hs_test_</span>) touch sandbox data. Live keys (<span class="mono">hs_live_</span>) touch live data. Keys are shown once.</p>
+  <form id="kf" class="row" style="margin-top:12px"><label class="f" style="flex:1;min-width:200px">Name<input name="name" required maxlength="60" placeholder="ServiceHub production"></label><label class="f">Mode<select name="mode"><option value="test">Test</option><option value="live">Live</option></select></label><button class="btn primary" style="align-self:flex-end">Create key</button></form><div id="newkey"></div><div id="flash"></div></div>
+  <div class="card scroll" style="padding:0">${keys.length?`<table><thead><tr><th>Name</th><th>Key</th><th>Mode</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody>${keys.map(k=>`<tr><td><b>${esc(k.name)}</b></td><td class="mono">${esc(k.prefix)}…</td><td><span class="pill ${k.mode==="live"?"sent":"draft"}">${esc(k.mode)}</span></td><td>${esc(when(k.created_at))}</td><td>${k.last_used_at?esc(when(k.last_used_at)):"never"}</td><td><button class="btn sm danger" data-kid="${esc(k.id)}">Revoke</button></td></tr>`).join("")}</tbody></table>`:`<div class="empty">No keys yet.</div>`}</div>`;
+  $("#kf").onsubmit=async e=>{e.preventDefault();try{const k=await api("/v1/api-keys",{method:"POST",body:Object.fromEntries(new FormData(e.target))});
+    $("#newkey").innerHTML=`<div class="ok" style="word-break:break-all">Copy your key now, it will not be shown again:<pre id="kv">${esc(k.key)}</pre><button class="btn sm" id="kc">Copy</button></div>`;$("#kc").onclick=async()=>{$("#kc").textContent=(await copyText(k.key))?"Copied":"Select the key and copy"};
+    $("#kf").reset();setTimeout(()=>{},0)}catch(x){flash(x.message,true)}};
+  document.querySelectorAll("[data-kid]").forEach(b=>b.onclick=async()=>{if(b.dataset.sure!=="1"){b.dataset.sure="1";b.textContent="Confirm revoke";return}await api("/v1/api-keys/"+b.dataset.kid,{method:"DELETE"});keysTab()});
+}
+async function hooksTab(){
+  const [{webhooks},{events}]=await Promise.all([api("/v1/webhooks"),api("/v1/webhook-events")]);
+  $("#dev").innerHTML=`<div class="card"><h2>Add an endpoint</h2><p class="sub">We POST JSON and sign every request. This tab shows ${state.mode==="test"?"sandbox":"live"} webhooks; switch mode above for the other set.</p>
+  <form id="wf" style="margin-top:12px"><label class="f">Endpoint URL<input name="url" type="url" required placeholder="https://example.com/hubsign/webhook"></label>
+  <div class="row" style="margin:10px 0">${events.map(e=>`<label class="row" style="gap:6px"><input type="checkbox" style="width:auto" value="${e}" name="ev"> <span class="mono">${e}</span></label>`).join("")}</div><p class="sub">Leave all unchecked to receive every event.</p><div id="flash"></div><button class="btn primary">Add endpoint</button></form></div>
+  <div id="whs">${webhooks.map(w=>`<div class="card" data-w="${esc(w.id)}"><div class="row" style="justify-content:space-between"><div><b class="mono" style="word-break:break-all">${esc(w.url)}</b><div class="sub">${w.events.length?esc(w.events.join(", ")):"all events"}</div></div><div class="row"><button class="btn sm" data-act="secret">Signing secret</button><button class="btn sm" data-act="test">Send test</button><button class="btn sm" data-act="log">Deliveries</button><button class="btn sm danger" data-act="del">Delete</button></div></div><div class="more"></div></div>`).join("")||`<div class="card empty">No endpoints yet.</div>`}</div>`;
+  $("#wf").onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.target);try{await api("/v1/webhooks",{method:"POST",body:{url:fd.get("url"),events:fd.getAll("ev")}});hooksTab()}catch(x){flash(x.message,true)}};
+  document.querySelectorAll("[data-w]").forEach(card=>{const id=card.dataset.w,more=card.querySelector(".more");
+    const log=async()=>{const {deliveries}=await api(`/v1/webhooks/${id}/deliveries`);
+      more.innerHTML=`<div class="scroll" style="margin-top:12px"><table><thead><tr><th>Event</th><th>Status</th><th>HTTP</th><th>Tries</th><th>When</th><th></th></tr></thead><tbody>${deliveries.map((d,i)=>`<tr class="click" data-i="${i}"><td class="mono">${esc(d.event)}</td><td>${pill(d.status)}</td><td>${d.http_status||"–"}</td><td>${d.attempts}</td><td>${esc(when(d.last_at||d.created_at))}</td><td><button class="btn sm" data-re="${esc(d.id)}">Redeliver</button></td></tr><tr class="pl" hidden><td colspan="6"><pre>${esc(JSON.stringify(d.payload,null,2))}</pre>${d.response?`<div class="sub">Response: ${esc(d.response)}</div>`:""}</td></tr>`).join("")||`<tr><td colspan="6" class="sub">No deliveries yet.</td></tr>`}</tbody></table></div>`;
+      more.querySelectorAll("tr.click").forEach(tr=>tr.onclick=()=>{tr.nextElementSibling.hidden=!tr.nextElementSibling.hidden});
+      more.querySelectorAll("[data-re]").forEach(b=>b.onclick=async e=>{e.stopPropagation();await api(`/v1/webhook-deliveries/${b.dataset.re}/redeliver`,{method:"POST"});setTimeout(log,600)})};
+    card.querySelectorAll("[data-act]").forEach(b=>b.onclick=async()=>{const a=b.dataset.act;
+      if(a==="secret"){const w=await api("/v1/webhooks/"+id);more.innerHTML=`<pre>${esc(w.secret)}</pre><p class="sub">Use this to verify the HubSign-Signature header. See the Reference tab.</p>`}
+      if(a==="test"){await api(`/v1/webhooks/${id}/test`,{method:"POST"});setTimeout(log,700)}
+      if(a==="log")log();
+      if(a==="del"){if(b.dataset.sure!=="1"){b.dataset.sure="1";b.textContent="Confirm delete";return}await api("/v1/webhooks/"+id,{method:"DELETE"});hooksTab()}})});
+}
+function docsTab(){
+  const base=location.origin,k="hs_test_YOUR_KEY";
+  $("#dev").innerHTML=`<div class="card"><h2>Quickstart</h2><p class="sub">1. Create a test key on the API keys tab. 2. Send an envelope. 3. Open the signing link from the response.</p>
+<pre>curl -s ${esc(base)}/v1/envelopes \\
+  -H "Authorization: Bearer ${k}" -H "Content-Type: application/json" \\
+  -d '{"subject":"NDA","document_base64":"'"$(base64 -w0 nda.pdf)"'",
+       "recipients":[{"name":"Ann Lee","email":"ann@example.com"}],
+       "fields":[{"recipient":0,"type":"signature","page":1,"x":0.10,"y":0.85}],
+       "metadata":{"deal":"D-1042"},"send":true}'</pre>
+<p class="sub">Field boxes are fractions of the page measured from the top-left, so they survive any page size. Sizes default per type.</p>
+<h3 style="margin-top:14px">Python SDK</h3><pre>from hubsign.sdk import HubSign
+hs = HubSign("${k}", base_url="${esc(base)}")
+env = hs.create_envelope("nda.pdf", subject="NDA",
+    recipients=[{"name": "Ann Lee", "email": "ann@example.com"}],
+    fields=[{"recipient": 0, "type": "signature", "page": 1, "x": 0.1, "y": 0.85}], send=True)
+print(env["recipients"][0]["signing_url"])
+hs.download_signed(env["id"], "nda-signed.pdf")   # after status == completed</pre></div>
+<div class="card"><h2>Webhooks</h2><p class="sub">Each delivery is a JSON POST with these headers. Reject anything older than five minutes.</p>
+<pre>HubSign-Event:      envelope.completed
+HubSign-Delivery:   del_9f2c...
+HubSign-Signature:  t=1767225600,v1=5257a869e7ec...   # HMAC-SHA256 of "{t}.{raw body}" with your signing secret</pre>
+<pre>from hubsign.sdk import verify_signature
+verify_signature(secret, request.headers["HubSign-Signature"], raw_body)   # raises ValueError if invalid or stale
+
+// Node
+const mac = crypto.createHmac("sha256", secret).update(t + "." + rawBody).digest("hex");
+if (!crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(v1))) throw new Error("bad signature");</pre>
+<p class="sub">Failed deliveries (non-2xx or timeout) retry after 5 s, 1 min and 10 min. Every attempt is in the Deliveries log, and you can redeliver any event.</p>
+<h3 style="margin-top:14px">Events</h3><p class="mono">envelope.sent · envelope.completed · envelope.declined · envelope.voided · recipient.sent · recipient.viewed · recipient.signed · recipient.declined</p></div>
+<div class="card scroll"><h2>Endpoints</h2><table><tbody>
+${[["POST","/v1/envelopes","Create (and optionally send) an envelope"],["GET","/v1/envelopes","List, filter by status"],["GET","/v1/envelopes/{id}","Status, recipients, signing links, fields"],["POST","/v1/envelopes/{id}/send","Send a draft"],["POST","/v1/envelopes/{id}/void","Cancel a sent envelope"],["GET","/v1/envelopes/{id}/events","Audit trail"],["GET","/v1/envelopes/{id}/signed","Signed PDF with certificate"],["POST","/v1/webhooks","Register an endpoint"],["POST","/v1/webhooks/{id}/test","Send a test event"],["GET","/v1/webhooks/{id}/deliveries","Delivery log"]].map(r=>`<tr><td class="mono" style="width:70px"><b>${r[0]}</b></td><td class="mono">${r[1]}</td><td class="sub">${r[2]}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+/* ---------- router ---------- */
+async function route(){
+  if(!state.me){try{state.me=await api("/auth/me")}catch{}}
+  if(!state.me)return authView(false);
+  const [page,arg]=location.hash.replace(/^#/,"").split("/");
+  try{
+    if(page==="new")composerView();
+    else if(page==="env"&&arg)await detailView(arg);
+    else if(page==="developer")await developerView(arg||"keys");
+    else await listView(arg||"");
+  }catch(x){$("#app").innerHTML=shell("envelopes",`<div class="err">${esc(x.message)}</div>`);bindShell()}
+}
+addEventListener("hashchange",route);route();
+</script>
+</body>
+</html>
