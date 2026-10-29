@@ -1,0 +1,42 @@
+<% if turbo_native_app? && local_assigns[:next_page_path].blank? %>
+  <%= local_assigns[:right_additional_html] %>
+  <% if local_assigns[:left_additional_html].present? %>
+    <div class="mt-2">
+      <%= local_assigns[:left_additional_html] %>
+    </div>
+  <% end %>
+<% elsif pagy.pages > 1 %>
+  <% left_additional_html = local_assigns[:left_additional_html] %>
+  <div class="flex flex-col md:flex-row md:items-center <%= left_additional_html.present? ? 'mt-3' : 'mt-6' %> mb-6 md:my-6 justify-center md:justify-between">
+    <div class="text-sm <%= 'mb-2 md:mb-0' if left_additional_html.present? %>">
+      <span class="hidden md:inline">
+        <% if pagy.count.nil? %>
+          <%= t("pagination.#{local_assigns.fetch(:items_name, 'items')}.range_without_total", from: local_assigns.fetch(:from, pagy.from), to: local_assigns.fetch(:to, pagy.to)) %>
+        <% else %>
+          <%= t("pagination.#{local_assigns.fetch(:items_name, 'items')}.range_with_total", from: local_assigns.fetch(:from, pagy.from), to: local_assigns.fetch(:to, pagy.to), count: local_assigns.fetch(:count, pagy.count)) %>
+        <% end %>
+      </span>
+      <%= left_additional_html %>
+    </div>
+    <div class="flex items-center space-x-1.5 justify-center md:justify-end">
+      <%= local_assigns[:right_additional_html] %>
+      <div class="join">
+        <% if pagy.previous %>
+          <%= link_to '«', url_for(params: request.query_parameters.merge('page' => pagy.previous)), class: 'join-item btn min-h-full h-10' %>
+        <% else %>
+          <span class="join-item btn btn-disabled !bg-base-200 min-h-full h-10">«</span>
+        <% end %>
+        <span class="join-item btn font-medium uppercase min-h-full h-10">
+          <%= t('page_number', number: pagy.page) %>
+        </span>
+        <% if local_assigns[:next_page_path].present? %>
+          <%= link_to '»', local_assigns[:next_page_path], class: 'join-item btn min-h-full h-10' %>
+        <% elsif pagy.next %>
+          <%= link_to '»', url_for(params: request.query_parameters.merge('page' => pagy.next)), class: 'join-item btn min-h-full h-10' %>
+        <% else %>
+          <span class="join-item btn btn-disabled !bg-base-200 min-h-full h-10">»</span>
+        <% end %>
+      </div>
+    </div>
+  </div>
+<% end %>

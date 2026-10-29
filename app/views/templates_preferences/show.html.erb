@@ -1,0 +1,206 @@
+<%= render 'shared/turbo_modal_large', title: t('preferences') do %>
+  <% show_api = Docuseal.multitenant? || current_account.testing? || !current_account.linked_account_account %>
+  <% show_recipients = @template.submitters.to_a.length > 1 %>
+  <% options = [[t('general'), 'general']] %>
+  <% options << [t('recipients'), 'recipients'] if show_recipients %>
+  <% options << [safe_join([tag.span('API', class: 'md:hidden'), tag.span(t('api_and_embedding'), class: 'hidden md:inline')]), 'api'] if show_api %>
+  <% if options.size > 1 %>
+    <toggle-visible data-element-ids="<%= options.map(&:last).to_json %>" class="relative text-center block <%= 'mt-3' unless turbo_native_app? %>">
+      <div class="join">
+        <% options.each_with_index do |(label, value), index| %>
+          <span>
+            <%= radio_button_tag 'option', value, value == 'general', class: 'peer hidden', data: { action: 'change:toggle-visible#trigger' } %>
+            <label for="option_<%= value %>" class="<%= '!rounded-s-full' if index.zero? %> btn btn-sm join-item peer-checked:btn-active normal-case px-5 md:px-0 <%= 'min-w-24 md:min-w-0' if value == 'api' %> <%= options.size > 2 ? 'md:w-44' : 'md:w-48' %>">
+              <%= label %>
+            </label>
+          </span>
+        <% end %>
+      </div>
+    </toggle-visible>
+  <% end %>
+  <div id="general" class="px-5 mb-4">
+    <%= render 'access' %>
+    <%= form_for @template, url: template_preferences_path(@template), method: :post, html: { autocomplete: 'off', class: 'mt-2' }, data: { close_on_submit: false } do |f| %>
+      <toggle-on-submit data-element-id="bcc_saved_alert"></toggle-on-submit>
+      <%= f.fields_for :preferences, Struct.new(:bcc_completed).new(@template.preferences['bcc_completed']) do |ff| %>
+        <div class="form-control">
+          <%= ff.label :bcc_completed, class: 'label' do %>
+            <span class="flex items-center space-x-1 justify-between w-full">
+              <span>
+                <%= t('completed_documents_notification_bcc_address') %>
+              </span>
+            </span>
+          <% end %>
+          <%= tag.input type: 'email', multiple: true, name: 'template[preferences][bcc_completed]', autocomplete: 'off', class: 'base-input', value: ff.object.bcc_completed, id: ff.field_id(:bcc_completed) %>
+        </div>
+      <% end %>
+      <div class="form-control pt-3">
+        <%= f.button button_title(title: t('save'), disabled_with: t('updating')), class: 'base-button' %>
+        <div class="flex justify-center">
+          <span id="bcc_saved_alert" class="text-sm invisible font-normal mt-0.5"><%= t('changes_have_been_saved') %></span>
+        </div>
+      </div>
+    <% end %>
+    <%= form_for @template, url: template_preferences_path(@template), method: :post, html: { autocomplete: 'off', class: 'mb-5' }, data: { close_on_submit: false } do |f| %>
+      <%= f.fields_for :preferences, Struct.new(:default_expire_at_duration, :default_expire_at).new(@template.preferences['default_expire_at_duration'], @template.preferences['default_expire_at'] ? Time.zone.parse(@template.preferences['default_expire_at']).in_time_zone(current_account.timezone) : nil) do |ff| %>
+        <div class="form-control">
+          <% duration_options = Templates::EXPIRATION_DURATIONS.keys.map { |duration| [t(duration), duration] } + [[t('specified_date'), 'specified_date']] %>
+          <%= ff.label :default_expire_at_duration, t('default_expiration'), class: 'label pt-0' %>
+          <div class="flex flex-col md:flex-row md:items-center gap-2">
+            <show-on-value data-value="specified_date" data-selector-id="template_preferences_default_expire_at" class="flex w-full">
+              <%= ff.select :default_expire_at_duration, duration_options, { include_blank: t('none') }, required: false, class: 'base-select flex-1', dir: 'auto', autocomplete: 'off' %>
+            </show-on-value>
+            <submit-form data-on="change" data-submit-if-value="true" class="flex">
+              <%= ff.datetime_field :default_expire_at, required: false, class: ['base-input flex-1', ff.object.default_expire_at.blank? && 'hidden'].compact_blank.join(' '), dir: 'auto', autocomplete: 'off' %>
+            </submit-form>
+          </div>
+        </div>
+      <% end %>
+    <% end %>
+    <div class="collapse collapse-arrow join-item border border-base-300 mb-2">
+      <input type="checkbox" name="accordion">
+      <div class="collapse-title text-xl font-medium">
+        <%= t('form_preferences') %>
+      </div>
+      <div class="collapse-content">
+        <native-event data-on="submit" data-name="template-builder:update" data-dismiss="false" class="block">
+          <%= render 'templates_prefillable_fields/form', template: @template %>
+        </native-event>
+        <%= form_for @template, url: template_preferences_path(@template), method: :post, html: { autocomplete: 'off', class: 'mt-1' }, data: { close_on_submit: false } do |f| %>
+          <toggle-on-submit data-element-id="form_saved_alert"></toggle-on-submit>
+          <% configs = AccountConfigs.find_or_initialize_for_key(current_account, AccountConfig::SUBMITTER_COMPLETED_EMAIL_KEY).value %>
+          <%= f.fields_for :preferences, Struct.new(:completed_redirect_url, :completed_message, :require_phone_2fa, :require_email_2fa).new(@template.preferences['completed_redirect_url'].presence, Struct.new(:title, :body).new(*(@template.preferences['completed_message'] || {}).values_at('title', 'body')), @template.preferences['require_phone_2fa'] == true, @template.preferences['require_email_2fa'] == true) do |ff| %>
+            <div class="form-control mb-2">
+              <%= ff.label :completed_redirect_url, t('redirect_on_completion_url'), class: 'label' %>
+              <%= ff.url_field :completed_redirect_url, required: false, class: 'base-input', dir: 'auto' %>
+            </div>
+            <%= ff.fields_for :completed_message, ff.object.completed_message do |fff| %>
+              <div class="form-control mb-2 mt-4">
+                <%= fff.label :body, t('completion_message'), class: 'label' %>
+                <autoresize-textarea>
+                  <%= fff.text_area :body, required: false, class: 'base-input w-full py-2', dir: 'auto' %>
+                </autoresize-textarea>
+              </div>
+            <% end %>
+            <%= render 'templates_preferences/form_fields', ff: %>
+            <div class="flex items-center justify-between py-2.5 px-1 mb-2">
+              <span>
+                <%= t('require_email_2fa_to_open') %>
+              </span>
+              <submit-form data-on="change" class="flex">
+                <%= ff.check_box :require_email_2fa, { checked: ff.object.require_email_2fa == true, class: 'toggle' }, 'true', 'false' %>
+              </submit-form>
+            </div>
+          <% end %>
+          <div class="form-control pt-2">
+            <%= f.button button_title(title: t('save'), disabled_with: t('saving')), class: 'base-button' %>
+            <div class="flex justify-center">
+              <span id="form_saved_alert" class="text-sm invisible font-normal mt-0.5"><%= t('changes_have_been_saved') %></span>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    </div>
+    <div class="join join-vertical w-full !rounded-2xl mb-1.5 mt-2.5">
+      <div class="collapse collapse-arrow join-item border border-base-300">
+        <input type="checkbox" name="accordion">
+        <div class="collapse-title text-xl font-medium">
+          <%= t('signature_request_email') %>
+        </div>
+        <div class="collapse-content min-w-0">
+          <%= render 'templates_preferences/submitter_invitation_email_form' %>
+        </div>
+      </div>
+      <% field_submitter_uuids = Set.new(@template.fields.pluck('submitter_uuid')) %>
+      <% unless @template.submitters.all? { |s| field_submitter_uuids.include?(s['uuid']) } %>
+        <div class="collapse collapse-arrow join-item border border-base-300">
+          <input type="checkbox" name="accordion">
+          <div class="collapse-title text-xl font-medium">
+            <%= t('view_documents_email') %>
+          </div>
+          <div class="collapse-content">
+            <%= render 'templates_preferences/submitter_view_invitation_email_form' %>
+          </div>
+        </div>
+      <% end %>
+      <%= render 'templates_preferences/submitter_invitation_reminder_email_collapse' %>
+      <div class="collapse collapse-arrow join-item border border-base-300">
+        <input type="checkbox" name="accordion">
+        <div class="collapse-title text-xl font-medium">
+          <%= t('documents_copy_email') %>
+        </div>
+        <div class="collapse-content">
+          <%= render 'templates_preferences/submitter_documents_copy_email_form' %>
+        </div>
+      </div>
+      <div class="collapse collapse-arrow join-item border border-base-300">
+        <input type="checkbox" name="accordion">
+        <div class="collapse-title text-xl font-medium">
+          <%= t('completed_notification_email') %>
+        </div>
+        <div class="collapse-content">
+          <%= render 'templates_preferences/submitter_completed_email_form' %>
+        </div>
+      </div>
+    </div>
+    <%= render 'templates_code_modal/preferences', class: 'pt-2' %>
+  </div>
+  <% if show_recipients %>
+    <div id="recipients" class="hidden mt-2 mb-4 px-5 pt-1 pb-2">
+      <native-event data-on="submit" data-name="template-builder:update" class="block">
+        <%= render 'recipients', template: @template %>
+      </native-event>
+    </div>
+  <% end %>
+  <% if show_api %>
+    <div id="api" class="hidden mt-2 mb-4 px-5">
+      <div>
+        <label class="text-sm font-semibold" for="template_id">
+          <%= t('template_id') %>
+        </label>
+        <div class="flex gap-2 mb-4 mt-2">
+          <input id="template_id" type="text" value="<%= @template.id %>" class="base-input w-full" autocomplete="off" readonly>
+          <%= render 'shared/clipboard_copy', icon: 'copy', text: @template.id, class: 'base-button', icon_class: 'w-6 h-6 text-white', copy_title: t('copy'), copied_title: t('copied') %>
+        </div>
+      </div>
+      <div>
+        <label class="text-sm font-semibold" for="embedding_url">
+          <%= t('embedding_url') %>
+        </label>
+        <div class="flex gap-2 mb-4 mt-2">
+          <%= form_for @template, url: template_share_link_path(@template), method: :post, html: { id: 'shared_link_form', autocomplete: 'off', class: 'w-full mt-1' }, data: { close_on_submit: false } do |f| %>
+            <div class="flex gap-2">
+              <input id="embedding_url" type="text" value="<%= start_form_url(slug: @template.slug) %>" class="base-input w-full" autocomplete="off" readonly>
+              <check-on-click data-element-id="template_shared_link">
+                <%= render 'shared/clipboard_copy', icon: 'copy', text: start_form_url(slug: @template.slug), class: 'base-button', icon_class: 'w-6 h-6 text-white', copy_title: t('copy'), copied_title: t('copied') %>
+              </check-on-click>
+            </div>
+            <div class="flex items-center justify-between gap-1 pt-3">
+              <span><%= t('enable_shared_link') %></span>
+              <submit-form data-on="change" class="flex">
+                <%= f.check_box :shared_link, { class: 'toggle' }, 'true', 'false' %>
+              </submit-form>
+            </div>
+          <% end %>
+        </div>
+      </div>
+      <%= render 'templates_code_modal/placeholder' %>
+      <%= render 'templates/embedding', template: @template %>
+      <% if can?(:manage, TemplateSharing.new(template: @template)) %>
+        <%= form_for '', url: template_sharings_testing_index_path, method: :post, html: { class: 'mt-1' }, data: { close_on_submit: false } do |f| %>
+          <%= f.hidden_field :template_id, value: @template.id %>
+          <div class="flex items-center justify-between">
+            <span>
+              <%= t('share_template_with_test_mode') %>
+            </span>
+            <submit-form data-on="change" class="flex">
+              <%= f.check_box :value, class: 'toggle', checked: @template.template_sharings.exists?(account_id: (can?(:manage, :tenants_test) ? current_account : true_user.account).testing_accounts) %>
+            </submit-form>
+          </div>
+        <% end %>
+        <div class="mb-4">
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+<% end %>

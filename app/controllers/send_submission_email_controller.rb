@@ -1,0 +1,53 @@
+# frozen_string_literal: true
+
+class SendSubmissionEmailController < ApplicationController
+  layout 'form'
+
+  skip_before_action :authenticate_user!
+  skip_before_action :verify_authenticity_token
+  skip_authorization_check
+
+  SEND_DURATION = 30.minutes
+
+  def create
+    if params[:template_slug]
+      template = Template.find_by!(slug: params[:template_slug])
+
+      @submitter =
+        Submitter.completed.where(submission: template.submissions).find_by(email: params[:email].to_s.downcase)
+    elsif params[:submission_slug]
+      submission = Submission.find_by!(slug: params[:submission_slug])
+
+      @submitter = submission.submitters.order(:completed_at).find_by(email: params[:email].to_s.downcase)
+
+      return redirect_to submissions_preview_completed_path(params[:submission_slug], status: :error) unless @submitter
+    else
+      @submitter = Submitter.find_by!(slug: params[:submitter_slug])
+    end
+
+    if @submitter && completed_submitter?(@submitter)
+      RateLimit.call("send-email-#{@submitter.id}", limit: 2, ttl: 5.minutes)
+
+      SubmitterMailer.documents_copy_email(@submitter, sig: true).deliver_later! if can_send?(@submitter)
+    end
+
+    respond_to do |f|
+      f.html { render :success }
+      f.json { head :ok }
+    end
+  end
+
+  private
+
+  def completed_submitter?(submitter)
+    submitter.completed_at? || (submitter.viewer? && submitter.submission.completed_at?)
+  end
+
+  def can_send?(submitter)
+    return false if submitter.account.archived_at?
+    return false if EmailEvent.exists?(tag: :submitter_documents_copy, email: submitter.email, emailable: submitter,
+                                       event_type: :send, created_at: SEND_DURATION.ago..Time.current)
+
+    true
+  end
+end

@@ -1,0 +1,77 @@
+# frozen_string_literal: true
+
+class TemplatesDebugController < ApplicationController
+  load_and_authorize_resource :template
+
+  DEBUG_FILE = ''
+
+  def show
+    schema_uuids = @template.schema.index_by { |e| e['attachment_uuid'] }
+    attachment = @template.documents.find { |a| schema_uuids[a.uuid] }
+
+    if attachment
+      data = attachment.download
+
+      unless attachment.image?
+        fields =
+          Pdfium::Document.open_io(StringIO.new(data)) do |doc|
+            Templates::FindPdfiumAcroFields.call(attachment, doc, data)
+          end
+      end
+
+      # fields, = Templates::DetectFields.call(StringIO.new(data), attachment:) if fields.blank?
+
+      attachment.metadata['pdf'] ||= {}
+      attachment.metadata['pdf']['fields'] = fields
+
+      @template.update!(fields: Templates::ProcessDocument.normalize_attachment_fields(@template, [attachment]))
+    end
+
+    debug_file if DEBUG_FILE.present?
+
+    ActiveRecord::Associations::Preloader.new(
+      records: [@template],
+      associations: [{ schema_documents: { preview_images_attachments: :blob } }]
+    ).call
+
+    @template_data =
+      @template.as_json.merge(
+        documents: @template.schema_documents.as_json(
+          methods: %i[metadata signed_key],
+          include: { preview_images: { methods: %i[url metadata filename] } }
+        )
+      ).to_json
+
+    render 'templates/edit', layout: 'plain'
+  end
+
+  def debug_file
+    tempfile = Tempfile.new
+    tempfile.binmode
+    tempfile.write(File.read(DEBUG_FILE))
+    tempfile.rewind
+
+    filename = File.basename(DEBUG_FILE)
+
+    file = ActionDispatch::Http::UploadedFile.new(
+      tempfile:,
+      filename:,
+      type: Marcel::MimeType.for(tempfile)
+    )
+
+    params = { files: [file] }
+
+    documents, dynamic_documents = Templates::CreateAttachments.call(@template, params,
+                                                                     dynamic: DEBUG_FILE.ends_with?('.docx'))
+
+    schema = documents.map do |doc|
+      {
+        attachment_uuid: doc.uuid,
+        name: doc.filename.base,
+        dynamic: dynamic_documents.find { |e| e.uuid == doc.uuid }.present?
+      }
+    end
+
+    @template.update!(schema:)
+  end
+end

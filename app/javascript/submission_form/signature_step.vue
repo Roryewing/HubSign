@@ -1,0 +1,1046 @@
+<template>
+  <div
+    dir="auto"
+    class="relative"
+  >
+    <div
+      class="flex justify-between items-end w-full mb-3.5 md:mb-4"
+      :class="{ 'mb-2': !field.description }"
+    >
+      <label
+        v-if="showFieldNames"
+        class="label text-xl sm:text-2xl py-0 field-name-label"
+      >
+        <MarkdownContent
+          v-if="field.title"
+          :string="field.title"
+        />
+        <template v-else>
+          {{ field.name || t('signature') }}
+        </template>
+      </label>
+      <div class="space-x-2 flex flex-none">
+        <span
+          v-if="isTextSignature && format !== 'typed_or_upload' && format !== 'typed' && format !== 'upload'"
+          class="md:tooltip"
+          :data-tip="t('draw_signature')"
+        >
+          <button
+            id="type_text_button"
+            ref="typeTextButton"
+            type="button"
+            :aria-label="t('draw_signature')"
+            class="btn btn-outline btn-sm font-medium type-text-button"
+            @click="[toggleTextInput(), hideQr()]"
+          >
+            <IconSignature
+              :width="16"
+              aria-hidden="true"
+            />
+            <span class="hidden sm:inline">
+              {{ t('draw') }}
+            </span>
+          </button>
+        </span>
+        <span
+          v-else-if="withTypedSignature && format !== 'drawn_or_upload' && format !== 'typed_or_upload' && format !== 'typed' && format !== 'drawn' && format !== 'upload'"
+          class="md:tooltip ml-2"
+          :class="{ 'hidden sm:inline': modelValue || computedPreviousValue || computedPrefillData }"
+          :data-tip="t('type_text')"
+        >
+          <button
+            id="type_text_button"
+            ref="typeTextButton"
+            type="button"
+            :aria-label="t('type_text')"
+            class="btn btn-outline btn-sm font-medium inline-flex flex-nowrap type-text-button"
+            @click="[toggleTextInput(), hideQr()]"
+          >
+            <IconTextSize
+              :width="16"
+              aria-hidden="true"
+            />
+            <span class="hidden sm:inline">
+              {{ t('type') }}
+            </span>
+          </button>
+        </span>
+        <span
+          v-if="format !== 'typed' && format !== 'drawn' && format !== 'upload' && format !== 'drawn_or_typed'"
+          class="md:tooltip"
+          :class="{ 'hidden sm:inline': modelValue || computedPreviousValue || computedPrefillData }"
+          :data-tip="t('take_photo')"
+        >
+          <button
+            type="button"
+            :aria-label="t('upload')"
+            class="btn btn-outline btn-sm font-medium inline-flex flex-nowrap upload-image-button"
+            @click="$refs.takePhotoInput.click()"
+          >
+            <IconCamera
+              :width="16"
+              aria-hidden="true"
+            />
+            <input
+              :key="uploadImageInputKey"
+              ref="takePhotoInput"
+              type="file"
+              hidden
+              accept="image/*"
+              @change="drawImage"
+            >
+            <span class="hidden sm:inline">
+              {{ t('upload') }}
+            </span>
+          </button>
+        </span>
+        <button
+          v-if="modelValue || computedPreviousValue || computedPrefillData"
+          type="button"
+          class="btn btn-outline btn-sm font-medium reupload-button"
+          @click="remove"
+        >
+          <IconReload
+            :width="16"
+            aria-hidden="true"
+          />
+          {{ t(format === 'upload' ? 'reupload' : 'redraw') }}
+        </button>
+        <span
+          v-if="withQrButton && !modelValue && !computedPreviousValue && !computedPrefillData && format !== 'typed_or_upload' && format !== 'typed' && format !== 'upload'"
+          class="md:tooltip before:translate-x-[-90%]"
+          :data-tip="t('sign_on_the_touchscreen')"
+        >
+          <button
+            type="button"
+            :aria-label="t('sign_on_the_touchscreen')"
+            class="btn btn-sm btn-neutral font-medium hidden md:flex"
+            :class="{ 'btn-outline': !isShowQr, 'text-white': isShowQr }"
+            @click="isShowQr ? hideQr() : [isTextSignature = false, showQr()]"
+          >
+            <IconQrcode
+              :width="19"
+              :height="19"
+              aria-hidden="true"
+            />
+          </button>
+        </span>
+        <button
+          type="button"
+          :title="t('minimize')"
+          :aria-label="t('minimize')"
+          class="py-1.5 inline md:hidden"
+          @click="$emit('minimize')"
+        >
+          <IconArrowsDiagonalMinimize2
+            :width="20"
+            :height="20"
+            aria-hidden="true"
+          />
+        </button>
+      </div>
+    </div>
+    <div
+      v-if="field.description"
+      :id="field.uuid + '-desc'"
+      dir="auto"
+      class="mb-3 px-1 field-description-text"
+    >
+      <MarkdownContent :string="field.description" />
+    </div>
+    <AppearsOn :field="field" />
+    <input
+      :value="modelValue || computedPreviousValue"
+      type="hidden"
+      :name="`values[${field.uuid}]`"
+    >
+    <img
+      v-if="modelValue || computedPreviousValue || computedPrefillData"
+      :src="previousValueUrl"
+      :alt="field.name || t('signature')"
+      class="mx-auto bg-white border border-base-300 rounded max-h-44"
+    >
+    <FileDropzone
+      v-if="format === 'upload' && !modelValue && !computedPreviousValue && !computedPrefillData"
+      :message="`${t('upload')} ${field.name || t('signature')}`"
+      :submitter-slug="submitterSlug"
+      :dry-run="dryRun"
+      :accept="'image/*'"
+      @upload="[$emit('attached', $event[0]), $emit('update:model-value', $event[0].uuid)]"
+    />
+    <div
+      v-else
+      class="relative select-none"
+    >
+      <div
+        v-if="!modelValue && !computedPreviousValue && !computedPrefillData && !isShowQr && !isTextSignature && isSignatureStarted"
+        class="absolute top-0.5 right-0.5"
+      >
+        <button
+          type="button"
+          class="btn btn-ghost font-medium btn-xs md:btn-sm"
+          @click="[clear(), hideQr()]"
+        >
+          <IconReload
+            :width="16"
+            aria-hidden="true"
+          />
+          {{ t('clear') }}
+        </button>
+      </div>
+      <div
+        v-if="isTextSignature"
+        class="absolute top-0 right-0 left-0 bottom-0"
+      />
+      <canvas
+        v-show="!modelValue && !computedPreviousValue && !computedPrefillData"
+        ref="canvas"
+        role="img"
+        :aria-label="t('signature_drawing_area')"
+        style="padding: 1px; 0"
+        class="bg-white border border-base-300 rounded-2xl w-full draw-canvas"
+        @touchstart.passive="lockSwipe"
+        @touchend.passive="unlockSwipe"
+        @touchcancel.passive="unlockSwipe"
+      />
+      <div
+        v-if="isShowQr"
+        class="top-0 bottom-0 right-0 left-0 absolute bg-white rounded-2xl m-0.5"
+      />
+      <div
+        v-if="isShowQr"
+        class="top-0 bottom-0 right-0 left-0 absolute bg-base-content/10 rounded-2xl"
+      >
+        <div class="absolute top-1.5 right-1.5">
+          <button
+            type="button"
+            class="btn btn-sm btn-circle btn-normal btn-outline"
+            :aria-label="t('close')"
+            @click="hideQr"
+          >
+            <IconX aria-hidden="true" />
+          </button>
+        </div>
+        <div class="flex items-center justify-center w-full h-full p-4">
+          <div
+            class="bg-white p-4 rounded-xl h-full"
+          >
+            <canvas
+              ref="qrCanvas"
+              role="img"
+              :aria-label="t('scan_the_qr_code_with_the_camera_app_to_open_the_form_on_mobile_and_draw_your_signature')"
+              class="h-full"
+              width="132"
+              height="132"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+    <input
+      v-if="isTextSignature && !modelValue && !computedPreviousValue && !computedPrefillData"
+      id="signature_text_input"
+      ref="textInput"
+      class="base-input !text-2xl w-full mt-6"
+      :required="field.required && !isSignatureStarted"
+      :aria-label="field.name || t('signature')"
+      :placeholder="`${t('type_signature_here')}${field.required ? '...' : ' (' + t('optional') + ')'}`"
+      type="text"
+      @input="updateWrittenSignature"
+    >
+    <select
+      v-if="withSigningReason && !isOtherReason"
+      class="select base-input !text-2xl w-full mt-6 text-center"
+      :class="{ 'text-gray-300': !reason }"
+      required
+      :aria-label="t('select_a_reason')"
+      :name="`values[${field.preferences.reason_field_uuid}]`"
+      @change="$event.target.value === 'other' ? [reason = '', isOtherReason = true] : $emit('update:reason', $event.target.value)"
+    >
+      <option
+        value=""
+        disabled
+        :selected="!reason"
+        class="text-gray-300"
+      >
+        {{ t('select_a_reason') }}
+      </option>
+      <template v-if="field.preferences?.reasons">
+        <option
+          v-for="option in field.preferences.reasons"
+          :key="option"
+          :value="option"
+          :selected="reason === option"
+          class="text-base-content"
+        >
+          {{ option }}
+        </option>
+      </template>
+      <template v-else>
+        <option
+          v-for="(label, option) in defaultReasons"
+          :key="option"
+          :value="option"
+          :selected="reason === option"
+          class="text-base-content"
+        >
+          {{ label }}
+        </option>
+        <option
+          value="other"
+          class="text-base-content"
+        >
+          {{ t('other') }}
+        </option>
+      </template>
+    </select>
+    <input
+      v-if="withSigningReason && isOtherReason"
+      class="base-input !text-2xl w-full mt-6"
+      required
+      :name="`values[${field.preferences.reason_field_uuid}]`"
+      :aria-label="t('select_a_reason')"
+      :placeholder="t('type_here_')"
+      :value="reason"
+      type="text"
+      @input="$emit('update:reason', $event.target.value)"
+    >
+    <input
+      v-if="withSigningReason"
+      hidden
+      name="with_reason"
+      :value="field.preferences.reason_field_uuid"
+    >
+    <div
+      v-if="isShowQr"
+      dir="auto"
+      class="text-base-content/60 text-xs text-center w-full mt-1"
+    >
+      {{ t('scan_the_qr_code_with_the_camera_app_to_open_the_form_on_mobile_and_draw_your_signature') }}
+    </div>
+    <div
+      v-else-if="withDisclosure"
+      dir="auto"
+      class="text-base-content/60 text-xs text-center w-full mt-1 select-none"
+    >
+      {{ t('by_clicking_you_agree_to_the').replace('{button}', buttonText.charAt(0).toUpperCase() + buttonText.slice(1)) }} <a
+        href="https://www.docuseal.com/esign-disclosure"
+        target="_blank"
+      >
+        <span class="inline md:hidden">
+          {{ t('esignature_disclosure') }}
+        </span>
+        <span class="hidden md:inline">
+          {{ t('electronic_signature_disclosure') }}
+        </span>
+      </a>
+    </div>
+    <div
+      v-else
+      class="mt-5 md:mt-7"
+    />
+  </div>
+</template>
+
+<script>
+import { IconReload, IconCamera, IconSignature, IconTextSize, IconArrowsDiagonalMinimize2, IconQrcode, IconX } from '@tabler/icons-vue'
+import { cropCanvasAndExportToPNG } from './crop_canvas'
+import { isValidSignatureCanvas, isCanvasBlocked } from './validate_signature'
+import SignaturePad from 'signature_pad'
+import AppearsOn from './appears_on'
+import FileDropzone from './dropzone'
+import MarkdownContent from './markdown_content'
+import { v4 } from 'uuid'
+
+let fontLoadPromise = null
+
+const scale = 3
+
+export default {
+  name: 'SignatureStep',
+  components: {
+    AppearsOn,
+    IconReload,
+    FileDropzone,
+    IconCamera,
+    IconQrcode,
+    MarkdownContent,
+    IconX,
+    IconTextSize,
+    IconSignature,
+    IconArrowsDiagonalMinimize2
+  },
+  inject: ['baseUrl', 'fetchOptions', 't'],
+  props: {
+    field: {
+      type: Object,
+      required: true
+    },
+    values: {
+      type: Object,
+      required: true
+    },
+    requireSigningReason: {
+      type: Boolean,
+      required: false,
+      default: false
+    },
+    submitter: {
+      type: Object,
+      required: true
+    },
+    showFieldNames: {
+      type: Boolean,
+      required: false,
+      default: true
+    },
+    dryRun: {
+      type: Boolean,
+      required: false,
+      default: false
+    },
+    withDisclosure: {
+      type: Boolean,
+      required: false,
+      default: false
+    },
+    withQrButton: {
+      type: Boolean,
+      required: false,
+      default: false
+    },
+    buttonText: {
+      type: String,
+      required: false,
+      default: 'Submit'
+    },
+    withTypedSignature: {
+      type: Boolean,
+      required: false,
+      default: true
+    },
+    rememberSignature: {
+      type: Boolean,
+      required: false,
+      default: false
+    },
+    attachmentsIndex: {
+      type: Object,
+      required: false,
+      default: () => ({})
+    },
+    previousValue: {
+      type: String,
+      required: false,
+      default: ''
+    },
+    prefillData: {
+      type: Object,
+      required: false,
+      default: null
+    },
+    reason: {
+      type: String,
+      required: false,
+      default: ''
+    },
+    signatureText: {
+      type: String,
+      required: false,
+      default: ''
+    },
+    signatureSrc: {
+      type: String,
+      required: false,
+      default: ''
+    },
+    nativePlatform: {
+      type: String,
+      required: false,
+      default: ''
+    },
+    modelValue: {
+      type: String,
+      required: false,
+      default: ''
+    }
+  },
+  emits: ['attached', 'update:model-value', 'start', 'minimize', 'update:reason'],
+  data () {
+    return {
+      isSignatureStarted: false,
+      isShowQr: false,
+      isOtherReason: false,
+      isUsePreviousValue: true,
+      isTextSignature: !this.signatureSrc && (!!this.signatureText || this.field.preferences?.format === 'typed' || this.field.preferences?.format === 'typed_or_upload'),
+      uploadImageInputKey: Math.random().toString()
+    }
+  },
+  computed: {
+    submitterSlug () {
+      return this.submitter.slug
+    },
+    format () {
+      return this.field.preferences?.format
+    },
+    withSigningReason () {
+      return this.requireSigningReason || this.field.preferences?.reasons?.length
+    },
+    defaultReasons () {
+      return {
+        [this.t('approved_by')]: this.t('approved'),
+        [this.t('reviewed_by')]: this.t('reviewed'),
+        [this.t('authored_by')]: this.t('authored_by_me')
+      }
+    },
+    computedPreviousValue () {
+      if (this.isUsePreviousValue && this.field.required === true) {
+        return this.previousValue
+      } else {
+        return null
+      }
+    },
+    computedPrefillData () {
+      if (this.isUsePreviousValue && this.field.required === true && !this.previousValue && !this.modelValue) {
+        return this.prefillData
+      } else {
+        return null
+      }
+    },
+    previousValueUrl () {
+      if (this.computedPrefillData) {
+        return this.computedPrefillData.url
+      } else {
+        return this.attachmentsIndex[this.modelValue || this.computedPreviousValue].url
+      }
+    }
+  },
+  created () {
+    this.isSignatureStarted = !!(this.computedPreviousValue || this.computedPrefillData)
+
+    if (this.withSigningReason) {
+      this.field.preferences ||= {}
+      this.field.preferences.reason_field_uuid ||= v4()
+      this.isOtherReason = this.reason && !this.defaultReasons[this.reason] &&
+        (!this.field.preferences?.reasons?.length || !this.field.preferences.reasons.includes(this.reason))
+    }
+  },
+  async mounted () {
+    this.$nextTick(() => this.setCanvasSize())
+
+    if (this.$refs.canvas) {
+      this.pad = new SignaturePad(this.$refs.canvas)
+
+      if (this.field.preferences?.color) {
+        this.pad.penColor = this.field.preferences.color
+      }
+
+      this.pad.addEventListener('endStroke', () => {
+        this.isSignatureStarted = true
+
+        this.$emit('start')
+      })
+
+      this.intersectionObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            this.setCanvasSize()
+
+            if (this.signatureSrc) {
+              this.$nextTick(() => this.drawSignatureSrc())
+            } else if (this.isTextSignature) {
+              this.$nextTick(() => {
+                if (this.$refs.textInput && this.field.required === true) {
+                  this.initTypedSignature()
+                }
+              })
+            }
+
+            this.intersectionObserver?.disconnect()
+          }
+        })
+      })
+
+      this.intersectionObserver.observe(this.$refs.canvas)
+
+      this.resizeObserver = new ResizeObserver(() => {
+        requestAnimationFrame(() => {
+          if (!this.$refs.canvas) return
+          if (!this.$refs.canvas.parentNode?.clientWidth) return
+
+          const { width, height } = this.$refs.canvas
+
+          this.setCanvasSize()
+
+          if (this.$refs.canvas.width !== width || this.$refs.canvas.height !== height) {
+            this.redrawCanvas(width, height)
+          }
+        })
+      })
+
+      this.resizeObserver.observe(this.$refs.canvas.parentNode)
+
+      if (this.isTextSignature) {
+        this.loadFont()
+      }
+    }
+  },
+  beforeUnmount () {
+    this.intersectionObserver?.disconnect()
+    this.resizeObserver?.disconnect()
+    this.stopCheckSignature()
+  },
+  methods: {
+    lockSwipe () {
+      if (this.nativePlatform) {
+        window.webkit?.messageHandlers?.native?.postMessage({ type: 'swipe', op: 'lock' })
+      }
+    },
+    unlockSwipe () {
+      if (this.nativePlatform) {
+        window.webkit?.messageHandlers?.native?.postMessage({ type: 'swipe', op: 'unlock' })
+      }
+    },
+    setCanvasSize () {
+      const canvas = this.$refs.canvas
+
+      if (canvas) {
+        const width = canvas.parentNode.clientWidth
+        const height = width / 3
+
+        if (canvas.width !== width * scale || canvas.height !== height * scale) {
+          canvas.width = width * scale
+          canvas.height = height * scale
+
+          canvas.getContext('2d').scale(scale, scale)
+        }
+      }
+    },
+    redrawCanvas (oldWidth, oldHeight) {
+      const canvas = this.$refs.canvas
+
+      if (this.pad && !this.isTextSignature && !this.pad.isEmpty() && oldWidth > 0 && oldHeight > 0 && canvas.width > 0 && canvas.height > 0) {
+        const sx = canvas.width / oldWidth
+        const sy = canvas.height / oldHeight
+
+        const scaledData = this.pad.toData().map((stroke) => ({
+          ...stroke,
+          points: stroke.points.map((p) => ({ ...p, x: p.x * sx, y: p.y * sy }))
+        }))
+
+        this.pad.fromData(scaledData)
+      } else if (this.isTextSignature && this.$refs.textInput) {
+        this.updateWrittenSignature({ target: this.$refs.textInput })
+      }
+    },
+    remove () {
+      this.$emit('update:model-value', '')
+
+      this.isUsePreviousValue = false
+      this.isSignatureStarted = false
+    },
+    loadFont () {
+      if (!fontLoadPromise) {
+        const font = new FontFace('Dancing Script', `url(${this.baseUrl}/fonts/DancingScript-Regular.otf) format("opentype")`)
+
+        fontLoadPromise = font.load().then((loadedFont) => {
+          document.fonts.add(loadedFont)
+        }).catch((error) => {
+          console.error('Font loading failed:', error)
+        })
+      }
+
+      return fontLoadPromise
+    },
+    showQr () {
+      this.isShowQr = true
+
+      this.$nextTick(() => {
+        import('qr-creator').then(({ default: Qr }) => {
+          if (this.$refs.qrCanvas) {
+            Qr.render({
+              text: `${document.location.origin}/p/${this.submitterSlug}?f=${this.field.uuid.split('-')[0]}`,
+              radius: 0.0,
+              ecLevel: 'H',
+              background: null,
+              size: 132
+            }, this.$refs.qrCanvas)
+          }
+        })
+      })
+
+      this.startCheckSignature()
+    },
+    hideQr () {
+      this.isShowQr = false
+
+      this.stopCheckSignature()
+    },
+    startCheckSignature () {
+      const after = JSON.stringify(new Date())
+
+      this.checkSignatureInterval = setInterval(() => {
+        this.checkSignature({ after })
+      }, 2000)
+    },
+    stopCheckSignature () {
+      if (this.checkSignatureInterval) {
+        clearInterval(this.checkSignatureInterval)
+      }
+    },
+    checkSignature (params = {}) {
+      return fetch(this.baseUrl + '/s/' + this.submitterSlug + '/values?field_uuid=' + this.field.uuid + '&after=' + params.after, {
+        method: 'GET'
+      }).then(async (resp) => {
+        const { attachment } = await resp.json()
+
+        if (attachment?.uuid) {
+          this.$emit('attached', attachment)
+          this.$emit('update:model-value', attachment.uuid)
+          this.hideQr()
+        }
+      })
+    },
+    clear () {
+      this.pad.clear()
+
+      this.isSignatureStarted = false
+
+      if (this.$refs.textInput) {
+        this.$refs.textInput.value = ''
+        this.$refs.textInput.focus()
+      }
+    },
+    updateWrittenSignature (e) {
+      this.isSignatureStarted = !!e.target.value
+
+      const canvas = this.$refs.canvas
+      const context = canvas.getContext('2d')
+
+      const fontFamily = 'Dancing Script'
+      const initialFontSize = 44
+      const fontStyle = 'italic'
+      const fontWeight = ''
+
+      const setFontSize = (size) => {
+        context.font = `${fontStyle} ${fontWeight} ${size}px ${fontFamily}`
+      }
+
+      const adjustFontSizeToFit = (text, maxWidth, initialSize) => {
+        let size = initialSize
+
+        setFontSize(size)
+
+        while (context.measureText(text).width > maxWidth && size > 1) {
+          size -= 1
+          setFontSize(size)
+        }
+      }
+
+      adjustFontSizeToFit(e.target.value, canvas.width / scale, initialFontSize)
+
+      context.textAlign = 'center'
+      context.clearRect(0, 0, canvas.width / scale, canvas.height / scale)
+      context.fillText(e.target.value, canvas.width / 2 / scale, canvas.height / 2 / scale + 11)
+    },
+    toggleTextInput () {
+      this.remove()
+      this.clear()
+      this.isTextSignature = !this.isTextSignature
+
+      this.$nextTick(() => {
+        if (this.isTextSignature) {
+          if (this.$refs.textInput) {
+            if (this.submitter.name) {
+              this.$refs.typeTextButton?.focus()
+            } else {
+              this.$refs.textInput.focus()
+            }
+
+            this.initTypedSignature()
+
+            this.$emit('start')
+          }
+        } else {
+          this.$refs.typeTextButton?.focus()
+        }
+      })
+    },
+    async initTypedSignature () {
+      if (this.signatureText) {
+        this.$refs.textInput.value = this.signatureText
+      } else if (this.submitter.name) {
+        this.$refs.textInput.value = this.submitter.name
+      }
+
+      await this.loadFont()
+
+      if (this.$refs.textInput.value) {
+        this.updateWrittenSignature({ target: this.$refs.textInput })
+      }
+    },
+    drawSignatureSrc () {
+      const canvas = this.$refs.canvas
+
+      if (!canvas) return
+
+      const img = new Image()
+
+      img.crossOrigin = 'anonymous'
+
+      img.onload = () => {
+        const context = canvas.getContext('2d')
+
+        const aspectRatio = img.width / img.height
+        const canvasWidth = canvas.width / scale
+        const canvasHeight = canvas.height / scale
+
+        let targetWidth = canvasWidth
+        let targetHeight = canvasHeight
+
+        if (canvasWidth / canvasHeight > aspectRatio) {
+          targetWidth = canvasHeight * aspectRatio
+        } else {
+          targetHeight = canvasWidth / aspectRatio
+        }
+
+        const x = (canvasWidth - targetWidth) / 2
+        const y = (canvasHeight - targetHeight) / 2
+
+        context.clearRect(0, 0, canvasWidth, canvasHeight)
+        context.drawImage(img, x, y, targetWidth, targetHeight)
+
+        this.isSignatureStarted = true
+
+        this.$emit('start')
+      }
+
+      img.onerror = () => {
+        console.error(`Failed to load signature image from ${this.signatureSrc}. The remote server must send an Access-Control-Allow-Origin header to allow CORS access.`)
+      }
+
+      img.src = this.signatureSrc
+    },
+    drawImage (event) {
+      this.remove()
+      this.clear()
+      this.isSignatureStarted = true
+
+      this.drawOnCanvas(event.target.files[0], this.$refs.canvas)
+
+      this.uploadImageInputKey = Math.random().toString()
+    },
+    drawOnCanvas (file, canvas) {
+      if (file && file.type.match('image.*')) {
+        const reader = new FileReader()
+
+        reader.onload = (event) => {
+          const img = new Image()
+
+          img.src = event.target.result
+
+          img.onload = () => {
+            const context = canvas.getContext('2d')
+
+            const aspectRatio = img.width / img.height
+            const canvasWidth = canvas.width / scale
+            const canvasHeight = canvas.height / scale
+
+            let targetWidth = canvasWidth
+            let targetHeight = canvasHeight
+
+            if (canvasWidth / canvasHeight > aspectRatio) {
+              targetWidth = canvasHeight * aspectRatio
+            } else {
+              targetHeight = canvasWidth / aspectRatio
+            }
+
+            if (targetHeight > targetWidth) {
+              const scale = targetHeight / targetWidth
+              targetWidth = targetWidth * scale
+              targetHeight = targetHeight * scale
+            }
+
+            const x = (canvasWidth - targetWidth) / 2
+            const y = (canvasHeight - targetHeight) / 2
+
+            setTimeout(() => {
+              context.clearRect(0, 0, canvasWidth, canvasHeight)
+              context.drawImage(img, x, y, targetWidth, targetHeight)
+
+              this.$emit('start')
+            }, 50)
+          }
+        }
+
+        reader.readAsDataURL(file)
+      }
+    },
+    maybeSetSignedUuid (signedUuid) {
+      try {
+        if (window.localStorage && signedUuid && this.rememberSignature) {
+          const values = window.localStorage.getItem('signed_signature_uuids')
+
+          let data
+
+          if (values) {
+            data = JSON.parse(values)
+          } else {
+            data = {}
+          }
+
+          data[this.submitter.email] = signedUuid
+
+          window.localStorage.setItem('signed_signature_uuids', JSON.stringify(data))
+        }
+      } catch (e) {
+        console.error(e)
+      }
+    },
+    submitPrefillAttachment () {
+      if (this.dryRun) {
+        const attachment = { uuid: Math.random().toString(), url: this.prefillData.url }
+
+        this.$emit('attached', attachment)
+        this.$emit('update:model-value', attachment.uuid)
+
+        return Promise.resolve(attachment)
+      }
+
+      const formData = new FormData()
+
+      formData.append('prefill_token', this.prefillData.token)
+
+      return fetch(this.baseUrl + `/s/${this.submitterSlug}/prefill_attachments`, {
+        method: 'POST',
+        headers: { ...this.fetchOptions.headers },
+        body: formData
+      }).then(async (resp) => {
+        if (!resp.ok) {
+          const data = await resp.json()
+
+          return Promise.reject(new Error(data.error))
+        }
+
+        const attachment = await resp.json()
+
+        this.$emit('attached', attachment)
+        this.$emit('update:model-value', attachment.uuid)
+
+        return attachment
+      }).catch((error) => {
+        this.remove()
+
+        return Promise.reject(error)
+      })
+    },
+    async submit () {
+      if (this.computedPrefillData) {
+        return this.submitPrefillAttachment()
+      }
+
+      if (this.modelValue || this.computedPreviousValue) {
+        if (this.computedPreviousValue) {
+          this.$emit('update:model-value', this.computedPreviousValue)
+        }
+
+        return Promise.resolve({})
+      }
+
+      if (this.isSignatureStarted && this.pad.toData().length > 0 && !isValidSignatureCanvas(this.pad.toData())) {
+        if (this.field.required === true || this.pad.toData().length > 0) {
+          if (isCanvasBlocked()) {
+            alert(this.t('browser_privacy_settings_block_canvas'))
+
+            if (window.Rollbar) {
+              window.Rollbar.info('Canvas blocked')
+            }
+          } else {
+            alert(this.t('signature_is_too_small_or_simple_please_redraw'))
+          }
+
+          return Promise.reject(new Error('Image too small or simple'))
+        } else {
+          Promise.resolve({})
+        }
+      }
+
+      return new Promise((resolve, reject) => {
+        cropCanvasAndExportToPNG(this.$refs.canvas, { errorOnTooSmall: true }).then(async (blob) => {
+          const file = new File([blob], 'signature.png', { type: 'image/png' })
+
+          if (this.dryRun) {
+            const reader = new FileReader()
+
+            reader.readAsDataURL(file)
+
+            reader.onloadend = () => {
+              const attachment = { url: reader.result, uuid: Math.random().toString() }
+
+              this.$emit('attached', attachment)
+              this.$emit('update:model-value', attachment.uuid)
+
+              resolve(attachment)
+            }
+          } else {
+            const formData = new FormData()
+
+            formData.append('file', file)
+            formData.append('submitter_slug', this.submitterSlug)
+            formData.append('name', 'attachments')
+            formData.append('remember_signature', this.rememberSignature)
+            formData.append('type', 'signature')
+
+            return fetch(this.baseUrl + `/s/${this.submitterSlug}/upload`, {
+              method: 'POST',
+              headers: { ...this.fetchOptions.headers },
+              body: formData
+            }).then((resp) => {
+              if (resp.status === 404) {
+                return fetch(this.baseUrl + '/api/attachments', {
+                  method: 'POST',
+                  headers: { ...this.fetchOptions.headers },
+                  body: formData
+                })
+              } else {
+                return resp
+              }
+            }).then(async (resp) => {
+              if (resp.status === 422 || resp.status === 500) {
+                const data = await resp.json()
+
+                return Promise.reject(new Error(data.error))
+              }
+
+              const attachment = await resp.json()
+
+              this.$emit('attached', attachment)
+              this.$emit('update:model-value', attachment.uuid)
+
+              this.maybeSetSignedUuid(attachment.signed_uuid)
+
+              return resolve(attachment)
+            })
+          }
+        }).catch((error) => {
+          if (this.field.required === true) {
+            if (isCanvasBlocked()) {
+              alert(this.t('browser_privacy_settings_block_canvas'))
+
+              if (window.Rollbar) {
+                window.Rollbar.info('Canvas blocked')
+              }
+            } else {
+              alert(this.t('signature_is_too_small_or_simple_please_redraw'))
+            }
+
+            return reject(error)
+          } else {
+            return resolve({})
+          }
+        })
+      })
+    }
+  }
+}
+</script>

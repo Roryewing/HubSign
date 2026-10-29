@@ -1,0 +1,33 @@
+<% filter_params = params.permit(:q, :archived, *Submissions::Filter::ALLOWED_PARAMS) %>
+<%= render 'shared/turbo_modal', title: t('export'), close_after_submit: false do %>
+  <div class="space-y-2">
+    <%= button_to template_submissions_export_index_path(@template), params: { format: :xlsx, **filter_params }, method: :get, data: { turbo_frame: :_top } do %>
+      <div class="flex items-center p-4 text-left rounded-2xl border border-neutral-300 hover:cursor-pointer hover:bg-neutral hover:text-gray-300">
+        <div class="enabled">
+          <%= svg_icon('download', class: 'w-12 h-12 stroke-2 mr-2') %>
+        </div>
+        <div class="disabled">
+          <%= svg_icon('loader', class: 'w-12 h-12 stroke-2 mr-2 animate-spin') %>
+        </div>
+        <div class="flex flex-col">
+          <span class="mb-1 text-lg font-semibold">XLSX</span>
+          <p class="text-sm"><%= t('primarily_opened_with_microsoft_excel_other_options_include_google_sheets_libreoffice_calc_and_openoffice_calc') %></p>
+        </div>
+      </div>
+    <% end %>
+    <%= button_to template_submissions_export_index_path(@template), params: { format: :csv, **filter_params }, method: :get, data: { turbo_frame: :_top } do %>
+      <div class="flex items-center text-left p-4 rounded-2xl border border-neutral-300 hover:cursor-pointer hover:bg-neutral hover:text-gray-300">
+        <div class="enabled">
+          <%= svg_icon('download', class: 'w-12 h-12 stroke-2 mr-2') %>
+        </div>
+        <div class="disabled">
+          <%= svg_icon('loader', class: 'w-12 h-12 stroke-2 mr-2 animate-spin') %>
+        </div>
+        <div class="flex flex-col">
+          <span class="mb-1 text-lg font-semibold">CSV</span>
+          <p class="text-sm"><%= t('can_be_opened_with_microsoft_excel_google_sheets_or_any_text_editor_like_notepad') %></p>
+        </div>
+      </div>
+    <% end %>
+  </div>
+<% end %>

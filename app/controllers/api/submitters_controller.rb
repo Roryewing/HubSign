@@ -1,0 +1,234 @@
+# frozen_string_literal: true
+
+module Api
+  class SubmittersController < ApiBaseController
+    load_and_authorize_resource :submitter
+
+    before_action :maybe_return_submitter_error, only: :update
+
+    def index
+      submitters = Submitters.search(current_user, @submitters, params[:q])
+
+      submitters = filter_submitters(submitters, params)
+
+      submitters = paginate(
+        submitters.preload(:template, :submission, :submission_events,
+                           documents_attachments: :blob, attachments_attachments: :blob)
+      )
+
+      expires_at = Accounts.link_expires_at(current_account)
+
+      render json: {
+        data: submitters.map do |s|
+                Submitters::SerializeForApi.call(s, with_template: true, with_events: true, params:, expires_at:)
+              end,
+        pagination: {
+          count: submitters.size,
+          next: submitters.last&.id,
+          prev: submitters.first&.id
+        }
+      }
+    end
+
+    def show
+      Submissions::EnsureResultGenerated.call(@submitter) if @submitter.completed_at?
+
+      render json: Submitters::SerializeForApi.call(@submitter, with_template: true, with_events: true, params:)
+    end
+
+    # rubocop:disable Metrics/MethodLength
+    def update
+      submission = @submitter.submission
+      role = submission.template_submitters.find { |e| e['uuid'] == @submitter.uuid }['name']
+
+      normalized_params, new_attachments = Submissions::NormalizeParamUtils.normalize_submitter_params!(
+        submitter_params.merge(role:),
+        @submitter.template || Template.new(submitters: submission.template_submitters, account: @submitter.account),
+        for_submitter: @submitter,
+        purpose: :api
+      )
+
+      Submissions::CreateFromSubmitters.maybe_set_template_fields(submission, [normalized_params],
+                                                                  default_submitter_uuid: @submitter.uuid)
+
+      assign_submitter_attrs(@submitter, normalized_params)
+
+      ApplicationRecord.transaction do
+        Submissions::NormalizeParamUtils.save_default_value_attachments!(new_attachments, [@submitter])
+
+        @submitter.save!
+
+        @submitter.submission.save!
+
+        if @submitter.completed_at?
+          Submitters::SubmitValues.maybe_invite_via_field(@submitter, request)
+          SubmissionEvents.create_with_tracking_data(@submitter, 'api_complete_form', request)
+        end
+      end
+
+      if @submitter.completed_at?
+        is_last = Submissions.maybe_update_completed_at(@submitter.submission)
+
+        ProcessSubmitterCompletionJob.perform_async('submitter_id' => @submitter.id, 'is_last' => is_last)
+      elsif normalized_params[:send_email] || normalized_params[:send_sms]
+        Submitters.send_signature_requests([@submitter])
+      end
+
+      SearchEntries.enqueue_reindex(@submitter)
+
+      render json: Submitters::SerializeForApi.call(@submitter, with_template: false, with_urls: true,
+                                                                with_events: false, params:)
+    rescue Submitters::NormalizeValues::BaseError, Submitters::SubmitValues::ValidationError,
+           DownloadUtils::UnableToDownload => e
+      Rollbar.warning(e) if defined?(Rollbar)
+
+      render json: { error: e.message }, status: :unprocessable_content
+    end
+    # rubocop:enable Metrics/MethodLength
+
+    def submitter_params
+      submitter_params = params.key?(:submitter) ? params.require(:submitter) : params
+
+      submitter_params.permit(
+        :send_email, :send_sms, :reply_to, :completed_redirect_url, :uuid, :name, :email, :role,
+        :completed, :phone, :application_key, :external_id, :go_to_last, :require_phone_2fa, :require_email_2fa,
+        { metadata: {}, values: {}, readonly_fields: [], message: %i[subject body],
+          fields: [[:name, :uuid, :default_value, :value, :required,
+                    :readonly, :validation_pattern, :invalid_message,
+                    { default_value: [], value: [], preferences: {} }]] }
+      )
+    end
+
+    private
+
+    def maybe_return_submitter_error
+      if @submitter.completed_at? || @submitter.submission.completed_at?
+        return render json: { error: 'Submitter has already completed the submission.' }, status: :unprocessable_content
+      end
+
+      return unless @submitter.declined_at?
+
+      render json: { error: 'Submitter has already declined the submission.' }, status: :unprocessable_content
+    end
+
+    def maybe_filter_by_completed_at(submitters, params)
+      if params[:completed_after].present?
+        submitters = submitters.where(completed_at: Time.zone.parse(params[:completed_after])..)
+      end
+
+      if params[:completed_before].present?
+        submitters = submitters.where(completed_at: ..Time.zone.parse(params[:completed_before]))
+      end
+
+      submitters
+    end
+
+    def assign_submitter_attrs(submitter, attrs)
+      values = attrs[:values]&.to_unsafe_h || {}
+
+      assign_submission_fields(submitter.submission)
+
+      phone_field_uuid = submitter.submission.template_fields.find do |f|
+        values[f['uuid']].present? && f['type'] == 'phone'
+      end&.dig('uuid')
+
+      submitter.email = Submissions.normalize_email(attrs[:email]) if attrs.key?(:email)
+      submitter.name = attrs[:name] if attrs.key?(:name)
+
+      if attrs.key?(:phone)
+        submitter.phone = attrs[:phone].to_s.gsub(/[^0-9+]/, '')
+      elsif values[phone_field_uuid].present?
+        submitter.phone = values[phone_field_uuid].to_s.gsub(/[^0-9+]/, '')
+      end
+
+      values = values.except(phone_field_uuid)
+
+      submitter.values = submitter.values.merge(values) if values.present?
+      submitter.metadata = attrs[:metadata] if attrs.key?(:metadata)
+
+      maybe_assign_completed_attributes(submitter, attrs)
+
+      assign_external_id(submitter, attrs)
+      assign_preferences(submitter, attrs)
+
+      submitter
+    end
+
+    def maybe_assign_completed_attributes(submitter, attrs)
+      submitter.completed_at = attrs[:completed] ? Time.current : submitter.completed_at
+
+      if attrs[:completed]
+        submitter.values = Submitters::SubmitValues.merge_default_values(submitter)
+        submitter.values = Submitters::SubmitValues.maybe_remove_condition_values(submitter)
+
+        formula_values = Submitters::SubmitValues.build_formula_values(submitter)
+
+        if formula_values.present?
+          submitter.values = submitter.values.merge(formula_values)
+          submitter.values = Submitters::SubmitValues.maybe_remove_condition_values(submitter)
+        end
+
+        submitter.values = Submitters::SubmitValues.replace_current_date_placeholders(submitter)
+      end
+
+      submitter
+    end
+
+    def filter_submitters(submitters, params)
+      submitters = submitters.where(external_id: params[:application_key]) if params[:application_key].present?
+      submitters = submitters.where(external_id: params[:external_id]) if params[:external_id].present?
+      submitters = submitters.where(slug: params[:slug]) if params[:slug].present?
+      submitters = submitters.where(submission_id: params[:submission_id]) if params[:submission_id].present?
+      submitters = submitters.where(template_id: params[:template_id]) if params[:template_id].present?
+
+      maybe_filter_by_completed_at(submitters, params)
+    end
+
+    def assign_external_id(submitter, attrs)
+      submitter.external_id = attrs[:application_key] if attrs.key?(:application_key)
+      submitter.external_id = attrs[:external_id] if attrs.key?(:external_id)
+
+      submitter
+    end
+
+    def assign_submission_fields(submission)
+      submission.template_fields ||= submission.template.fields
+      submission.template_schema ||= submission.template.schema
+    end
+
+    def assign_preferences(submitter, attrs)
+      submitter_preferences = Submitters.normalize_preferences(submitter.account, current_user, attrs)
+
+      submitter.preferences['default_values'] = attrs[:values].to_unsafe_h if attrs[:values].present?
+
+      if submitter_preferences.key?('send_email')
+        submitter.preferences['send_email'] = submitter_preferences['send_email']
+      end
+
+      submitter.preferences['send_sms'] = submitter_preferences['send_sms'] if submitter_preferences.key?('send_sms')
+      submitter.preferences['reply_to'] = submitter_preferences['reply_to'] if submitter_preferences.key?('reply_to')
+
+      if submitter_preferences.key?('require_phone_2fa')
+        submitter.preferences['require_phone_2fa'] = submitter_preferences['require_phone_2fa']
+      end
+
+      if submitter_preferences.key?('require_email_2fa')
+        submitter.preferences['require_email_2fa'] = submitter_preferences['require_email_2fa']
+      end
+
+      if submitter_preferences.key?('go_to_last')
+        submitter.preferences['go_to_last'] = submitter_preferences['go_to_last']
+      end
+
+      if submitter_preferences.key?('completed_redirect_url')
+        submitter.preferences['completed_redirect_url'] = submitter_preferences['completed_redirect_url']
+      end
+
+      return unless submitter_preferences.key?('email_message_uuid')
+
+      submitter.preferences['email_message_uuid'] = submitter_preferences['email_message_uuid']
+
+      submitter
+    end
+  end
+end

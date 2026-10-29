@@ -1,0 +1,721 @@
+<template>
+  <div
+    class="flex absolute lg:text-base -outline-offset-1 focus-visible:outline-blue-500 focus-visible:outline-2 focus-visible:outline field-area"
+    dir="auto"
+    :style="[computedStyle, fontStyle]"
+    :class="{ 'cursor-default': !submittable, 'border border-red-100 bg-red-100 cursor-pointer': submittable, 'border border-red-100': !isActive && submittable, 'bg-opacity-80': !isActive && !isValueSet && submittable, 'outline-red-500 outline-dashed outline-2 z-10 field-area-active': isActive && submittable, 'bg-opacity-40': (isActive || isValueSet) && submittable }"
+    :role="submittable && !isNativeInputField ? 'button' : undefined"
+    :tabindex="submittable && !isNativeInputField ? 0 : undefined"
+    :aria-label="submittable && !isNativeInputField ? fieldAreaLabel : undefined"
+    @keydown.enter.prevent="submittable && !isNativeInputField ? $el.click() : undefined"
+    @keydown.space.prevent="submittable && !isNativeInputField ? $el.click() : undefined"
+  >
+    <div
+      v-if="(!withFieldPlaceholder || !field.name || field.type === 'cells') && !isActive && !isValueSet && field.type !== 'checkbox' && submittable && !area.option_uuid"
+      class="absolute top-0 bottom-0 right-0 left-0 items-center justify-center h-full w-full"
+    >
+      <span
+        v-if="field"
+        class="flex justify-center items-center h-full opacity-50"
+      >
+        <component
+          :is="fieldIcons[field.type]"
+          width="100%"
+          height="100%"
+          class="max-h-10 text-base-content"
+          aria-hidden="true"
+        />
+      </span>
+    </div>
+    <div
+      v-if="isActive && withLabel && (!area.option_uuid || !option.value)"
+      class="absolute -top-7 rounded bg-base-content text-base-100 px-2 text-sm whitespace-nowrap pointer-events-none field-area-active-label"
+    >
+      <template v-if="area.option_uuid && !option.value">
+        {{ optionValue(option) }}
+      </template>
+      <template v-else>
+        <MarkdownContent
+          v-if="field.title"
+          :text-only="true"
+          :string="field.title"
+        />
+        <template v-else>
+          {{ field.name || fieldNames[field.type] }}
+        </template>
+        <template v-if="field.type === 'checkbox' && !field.name && !field.title">
+          {{ fieldIndex + 1 }}
+        </template>
+        <template v-else-if="!field.required && field.type !== 'checkbox'">
+          ({{ t('optional') }})
+        </template>
+      </template>
+    </div>
+    <div
+      ref="scrollToElem"
+      class="absolute"
+      :style="{ top: scrollPadding }"
+    />
+    <img
+      v-if="field.type === 'image' && image"
+      class="object-contain mx-auto"
+      :src="image.url"
+    >
+    <img
+      v-else-if="field.type === 'stamp' && stamp"
+      class="object-contain mx-auto"
+      :src="stamp.url"
+    >
+    <img
+      v-else-if="field.type === 'kba' && kba"
+      class="object-contain mx-auto"
+      :src="kba.url"
+    >
+    <div
+      v-else-if="field.type === 'signature' && signature"
+      class="flex justify-between h-full gap-1 overflow-hidden w-full"
+      :class="isNarrow && (isShowSignatureId || field.preferences?.reason_field_uuid) ? 'flex-row' : 'flex-col'"
+    >
+      <div
+        class="flex overflow-hidden"
+        :class="isNarrow && (isShowSignatureId || field.preferences?.reason_field_uuid) ? 'w-1/2' : 'flex-grow'"
+        style="min-height: 50%"
+      >
+        <img
+          class="object-contain mx-auto"
+          :src="signature.url"
+        >
+      </div>
+      <div
+        v-if="isShowSignatureId || field.preferences?.reason_field_uuid"
+        class="text-[1vw] lg:text-[0.55rem] lg:leading-[0.65rem]"
+        :class="isNarrow ? 'w-1/2' : 'w-full'"
+      >
+        <div class="truncate uppercase">
+          ID: {{ signature.uuid }}
+        </div>
+        <div>
+          <span v-if="values[field.preferences?.reason_field_uuid]">{{ t('reason') }}: </span>{{ values[field.preferences?.reason_field_uuid] || t('digitally_signed_by') }} {{ submitter.name }}
+          <template v-if="submitter.email">
+            &lt;{{ submitter.email }}&gt;
+          </template>
+        </div>
+        <div>
+          {{ new Date(signature.created_at).toLocaleString(undefined, { year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: 'numeric', timeZoneName: 'short' }) }}
+        </div>
+      </div>
+    </div>
+    <img
+      v-else-if="field.type === 'initials' && initials"
+      class="object-contain mx-auto"
+      :src="initials.url"
+    >
+    <div
+      v-else-if="(field.type === 'file' || field.type === 'payment') && attachments.length"
+      class="px-0.5 flex flex-col justify-center"
+    >
+      <a
+        v-for="(attachment, index) in attachments"
+        :key="index"
+        target="_blank"
+        :href="attachment.url"
+      >
+        <IconPaperclip
+          class="inline w-[1.6vw] h-[1.6vw] lg:w-4 lg:h-4"
+        />
+        {{ attachment.filename }}
+      </a>
+    </div>
+    <div
+      v-else-if="field.type === 'checkbox'"
+      class="w-full p-[1px] flex items-center justify-center"
+      @click="$event.target.querySelector('input')?.click()"
+    >
+      <input
+        v-if="submittable"
+        type="checkbox"
+        :value="false"
+        :aria-label="field.name || fieldNames[field.type]"
+        class="aspect-square base-checkbox"
+        :class="{ '!w-auto !h-full': area.w > area.h, '!w-full !h-auto': area.w <= area.h }"
+        :checked="!!modelValue"
+        @click="$emit('update:model-value', !modelValue)"
+      >
+      <IconCheck
+        v-else-if="modelValue"
+        class="aspect-square"
+        :class="{ '!w-auto !h-full': area.w > area.h, '!w-full !h-auto': area.w <= area.h }"
+      />
+    </div>
+    <div
+      v-else-if="field.type === 'radio' && area.option_uuid"
+      class="w-full p-[1px] flex items-center justify-center"
+      @click="$event.target.querySelector('input')?.click()"
+    >
+      <input
+        v-if="submittable"
+        type="radio"
+        :value="false"
+        :name="`radio-area-${field.uuid}`"
+        :aria-label="optionValue(option)"
+        class="aspect-square checked:checkbox checked:checkbox-xs"
+        :class="{ 'base-radio': !modelValue || modelValue !== optionValue(option), '!w-auto !h-full': area.w > area.h, '!w-full !h-auto': area.w <= area.h }"
+        :checked="!!modelValue && modelValue === optionValue(option)"
+        @click="$emit('update:model-value', optionValue(option))"
+      >
+      <IconCheck
+        v-else-if="!!modelValue && modelValue === optionValue(option)"
+        class="aspect-square"
+        :class="{ '!w-auto !h-full': area.w > area.h, '!w-full !h-auto': area.w <= area.h }"
+      />
+    </div>
+    <div
+      v-else-if="field.type === 'multiple' && area.option_uuid"
+      class="w-full p-[1px] flex items-center justify-center"
+      @click="$event.target.querySelector('input')?.click()"
+    >
+      <input
+        v-if="submittable"
+        type="checkbox"
+        :value="false"
+        :aria-label="optionValue(option)"
+        class="aspect-square base-checkbox"
+        :class="{ '!w-auto !h-full': area.w > area.h, '!w-full !h-auto': area.w <= area.h }"
+        :checked="!!modelValue && modelValue.includes(optionValue(option))"
+        @change="updateMultipleSelectValue(optionValue(option))"
+      >
+      <IconCheck
+        v-else-if="!!modelValue && modelValue.includes(optionValue(option))"
+        class="aspect-square"
+        :class="{ '!w-auto !h-full': area.w > area.h, '!w-full !h-auto': area.w <= area.h }"
+      />
+    </div>
+    <div
+      v-else-if="field.type === 'cells'"
+      class="w-full flex"
+      :class="{ 'justify-end': field.preferences?.align === 'right', ...alignClasses, ...fontClasses }"
+    >
+      <div
+        v-for="(char, index) in modelValue"
+        :key="index"
+        class="text-center flex-none"
+        :style="{ width: (area.cell_w / area.w * 100) + '%' }"
+      >
+        {{ char }}
+      </div>
+    </div>
+    <div
+      v-else
+      ref="textContainer"
+      dir="auto"
+      class="flex px-0.5 w-full"
+      :class="{ ...alignClasses, ...fontClasses }"
+    >
+      <span
+        v-if="field && field.name && withFieldPlaceholder && !modelValue && modelValue !== 0"
+        class="whitespace-pre-wrap text-gray-400"
+        :class="{ 'w-full': field.preferences?.align }"
+      >{{ field.name }}</span>
+      <span
+        v-else-if="Array.isArray(modelValue)"
+        :class="{ 'w-full': field.preferences?.align }"
+      >
+        {{ modelValue.join(', ') }}
+      </span>
+      <span
+        v-else-if="field.type === 'date'"
+        :class="{ 'w-full': field.preferences?.align }"
+      >
+        {{ formattedDate }}
+      </span>
+      <span
+        v-else-if="field.type === 'number'"
+        class="w-full"
+      >
+        {{ formatNumber(modelValue, field.preferences?.format) }}
+      </span>
+      <span
+        v-else-if="field.type === 'strikethrough'"
+        class="w-full h-full flex items-center justify-center"
+      >
+        <svg
+          v-if="(((1000.0 / pageWidth) * pageHeight) * area.h) < 40.0"
+          xmlns="http://www.w3.org/2000/svg"
+          width="100%"
+          height="100%"
+        >
+          <line
+            x1="0"
+            y1="50%"
+            x2="100%"
+            y2="50%"
+            :stroke="field.preferences?.color || 'red'"
+            :stroke-width="strikethroughWidth"
+          />
+        </svg>
+        <svg
+          v-else
+          xmlns="http://www.w3.org/2000/svg"
+          :style="{ overflow: 'visible', width: `calc(100% - ${strikethroughWidth})`, height: `calc(100% - ${strikethroughWidth})` }"
+        >
+          <line
+            x1="0"
+            y1="0"
+            x2="100%"
+            y2="100%"
+            :stroke="field.preferences?.color || 'red'"
+            :stroke-width="strikethroughWidth"
+          />
+          <line
+            x1="100%"
+            y1="0"
+            x2="0"
+            y2="100%"
+            :stroke="field.preferences?.color || 'red'"
+            :stroke-width="strikethroughWidth"
+          />
+        </svg>
+      </span>
+      <span
+        v-else
+        class="whitespace-pre-wrap"
+        :class="{ 'w-full': field.preferences?.align }"
+      >{{ modelValue }}</span>
+    </div>
+  </div>
+</template>
+
+<script>
+import MarkdownContent from './markdown_content'
+import { IconTextSize, IconWritingSign, IconCalendarEvent, IconPhoto, IconCheckbox, IconPaperclip, IconSelect, IconCircleDot, IconChecks, IconCheck, IconColumns3, IconPhoneCheck, IconLetterCaseUpper, IconCreditCard, IconRubberStamp, IconSquareNumber1, IconId, IconUserScan } from '@tabler/icons-vue'
+
+export default {
+  name: 'FieldArea',
+  components: {
+    IconPaperclip,
+    MarkdownContent,
+    IconCheck
+  },
+  inject: ['t'],
+  props: {
+    field: {
+      type: Object,
+      required: true
+    },
+    isInlineSize: {
+      type: Boolean,
+      required: false,
+      default: true
+    },
+    submitter: {
+      type: Object,
+      required: false,
+      default: () => ({})
+    },
+    withSignatureId: {
+      type: Boolean,
+      required: false,
+      default: false
+    },
+    pageWidth: {
+      type: Number,
+      required: false,
+      default: 0
+    },
+    pageHeight: {
+      type: Number,
+      required: false,
+      default: 0
+    },
+    isValueSet: {
+      type: Boolean,
+      required: false,
+      default: false
+    },
+    scrollPadding: {
+      type: String,
+      required: false,
+      default: '-80px'
+    },
+    withFieldPlaceholder: {
+      type: Boolean,
+      required: false,
+      default: false
+    },
+    submittable: {
+      type: Boolean,
+      required: false,
+      default: false
+    },
+    modelValue: {
+      type: [Array, String, Number, Object, Boolean],
+      required: false,
+      default: ''
+    },
+    values: {
+      type: Object,
+      required: false,
+      default: () => ({})
+    },
+    isActive: {
+      type: Boolean,
+      required: false,
+      default: false
+    },
+    withLabel: {
+      type: Boolean,
+      required: false,
+      default: true
+    },
+    fieldIndex: {
+      type: Number,
+      required: false,
+      default: 0
+    },
+    attachmentsIndex: {
+      type: Object,
+      required: false,
+      default: () => ({})
+    },
+    area: {
+      type: Object,
+      required: true
+    }
+  },
+  emits: ['update:model-value'],
+  data () {
+    return {
+      textOverflowChars: 0
+    }
+  },
+  computed: {
+    fieldNames () {
+      return {
+        text: this.t('text'),
+        signature: this.t('signature'),
+        initials: this.t('initials'),
+        date: this.t('date'),
+        number: this.t('number'),
+        image: this.t('image'),
+        file: this.t('file'),
+        select: this.t('select'),
+        checkbox: this.t('checkbox'),
+        multiple: this.t('multiple'),
+        radio: this.t('radio'),
+        cells: this.t('cells'),
+        stamp: this.t('stamp'),
+        payment: this.t('payment'),
+        phone: this.t('phone'),
+        verification: this.t('verify_id'),
+        kba: this.t('kba')
+      }
+    },
+    isNativeInputField () {
+      return ['checkbox', 'radio', 'multiple'].includes(this.field.type)
+    },
+    fieldAreaLabel () {
+      const name = this.field.name || this.fieldNames[this.field.type] || this.field.type
+      if (this.area.option_uuid && this.option) {
+        return `${name} - ${this.optionValue(this.option)}`
+      }
+      return name
+    },
+    strikethroughWidth () {
+      if (this.isInlineSize) {
+        return '0.6cqmin'
+      } else {
+        return 'clamp(0px, 0.5vw, 6px)'
+      }
+    },
+    isShowSignatureId () {
+      if ([true, false].includes(this.field.preferences?.with_signature_id)) {
+        return this.field.preferences.with_signature_id
+      } else {
+        return this.withSignatureId
+      }
+    },
+    alignClasses () {
+      if (!this.field.preferences) {
+        return { 'items-center': true }
+      }
+
+      return {
+        'text-center': this.field.preferences.align === 'center',
+        'text-left': this.field.preferences.align === 'left',
+        'text-right': this.field.preferences.align === 'right',
+        'items-center': !this.field.preferences.valign || this.field.preferences.valign === 'center',
+        'items-start': this.field.preferences.valign === 'top',
+        'items-end': this.field.preferences.valign === 'bottom'
+      }
+    },
+    fontClasses () {
+      if (!this.field.preferences) {
+        return {}
+      }
+
+      return {
+        'font-courier': this.field.preferences.font === 'Courier',
+        'font-times': this.field.preferences.font === 'Times',
+        'font-bold': ['bold_italic', 'bold'].includes(this.field.preferences.font_type),
+        italic: ['bold_italic', 'italic'].includes(this.field.preferences.font_type)
+      }
+    },
+    option () {
+      return this.field.options.find((o) => o.uuid === this.area.option_uuid)
+    },
+    fieldIcons () {
+      return {
+        text: IconTextSize,
+        signature: IconWritingSign,
+        date: IconCalendarEvent,
+        number: IconSquareNumber1,
+        image: IconPhoto,
+        initials: IconLetterCaseUpper,
+        file: IconPaperclip,
+        select: IconSelect,
+        checkbox: IconCheckbox,
+        radio: IconCircleDot,
+        stamp: IconRubberStamp,
+        cells: IconColumns3,
+        multiple: IconChecks,
+        phone: IconPhoneCheck,
+        payment: IconCreditCard,
+        verification: IconId,
+        kba: IconUserScan
+      }
+    },
+    image () {
+      if (this.field.type === 'image') {
+        return this.attachmentsIndex[this.modelValue]
+      } else {
+        return null
+      }
+    },
+    stamp () {
+      if (this.field.type === 'stamp') {
+        return this.attachmentsIndex[this.modelValue]
+      } else {
+        return null
+      }
+    },
+    kba () {
+      if (this.field.type === 'kba') {
+        return this.attachmentsIndex[this.modelValue]
+      } else {
+        return null
+      }
+    },
+    signature () {
+      if (this.field.type === 'signature') {
+        return this.attachmentsIndex[this.modelValue]
+      } else {
+        return null
+      }
+    },
+    initials () {
+      if (this.field.type === 'initials') {
+        return this.attachmentsIndex[this.modelValue]
+      } else {
+        return null
+      }
+    },
+    locale () {
+      return Intl.DateTimeFormat().resolvedOptions()?.locale
+    },
+    formattedDate () {
+      if (this.field.type === 'date' && this.modelValue) {
+        try {
+          return this.formatDate(
+            this.modelValue === '{{date}}' ? new Date() : new Date(this.modelValue),
+            this.field.preferences?.format || (this.locale.endsWith('-US') ? 'MM/DD/YYYY' : 'DD/MM/YYYY'),
+            { withTimePlaceholders: this.modelValue === '{{date}}', utc: this.modelValue !== '{{date}}' }
+          )
+        } catch {
+          return this.modelValue
+        }
+      } else {
+        return ''
+      }
+    },
+    attachments () {
+      if (this.field.type === 'file') {
+        return (this.modelValue || []).map((uuid) => this.attachmentsIndex[uuid])
+      } else if (this.field.type === 'payment') {
+        return [this.attachmentsIndex[this.modelValue]].filter(Boolean)
+      } else {
+        return []
+      }
+    },
+    fontStyle () {
+      let fontSize = ''
+
+      if (this.isInlineSize) {
+        if (this.textOverflowChars) {
+          fontSize = `${this.fontSizePx / 1.5 / 10}cqmin`
+        } else {
+          fontSize = `${this.fontSizePx / 10}cqmin`
+        }
+      } else {
+        if (this.textOverflowChars) {
+          fontSize = `clamp(1pt, ${this.fontSizePx / 1.5 / 10}vw, ${this.fontSizePx / 1.5}px)`
+        } else {
+          fontSize = `clamp(1pt, ${this.fontSizePx / 10}vw, ${this.fontSizePx}px)`
+        }
+      }
+
+      return { fontSize, lineHeight: `calc(${fontSize} * ${this.lineHeight})` }
+    },
+    fontSizePx () {
+      return parseInt(this.field?.preferences?.font_size || 11) * this.fontScale
+    },
+    lineHeight () {
+      return 1.3
+    },
+    fontScale () {
+      return 1000 / 612.0
+    },
+    computedStyle () {
+      const { x, y, w, h } = this.area
+
+      const style = {
+        top: y * 100 + '%',
+        left: x * 100 + '%',
+        width: w * 100 + '%',
+        height: h * 100 + '%'
+      }
+
+      if (this.field.preferences?.color) {
+        style.color = this.field.preferences.color
+      }
+
+      if (this.field.preferences?.background) {
+        style.background = this.field.preferences.background
+      }
+
+      return style
+    },
+    isNarrow () {
+      return this.area.h > 0 && ((this.area.w * this.pageWidth) / (this.area.h * this.pageHeight)) > 4.5
+    }
+  },
+  watch: {
+    modelValue () {
+      this.$nextTick(() => {
+        if (['date', 'text', 'number'].includes(this.field.type) && this.$refs.textContainer && (this.textOverflowChars === 0 || (this.textOverflowChars - 4) > `${this.modelValue}`.length)) {
+          this.textOverflowChars = this.$refs.textContainer.scrollHeight > (this.$refs.textContainer.clientHeight + 1) ? `${this.modelValue || (this.withFieldPlaceholder ? this.field.name : '')}`.length : 0
+        }
+      })
+    }
+  },
+  mounted () {
+    this.$nextTick(() => {
+      if (['date', 'text', 'number'].includes(this.field.type) && this.$refs.textContainer) {
+        this.textOverflowChars = this.$refs.textContainer.scrollHeight > (this.$refs.textContainer.clientHeight + 1) ? `${this.modelValue || (this.withFieldPlaceholder ? this.field.name : '')}`.length : 0
+      }
+    })
+  },
+  methods: {
+    optionValue (option) {
+      if (option) {
+        if (option.value) {
+          return option.value
+        } else {
+          const index = this.field.options.indexOf(option)
+
+          return `${this.t('option')} ${index + 1}`
+        }
+      }
+    },
+    formatNumber (number, format) {
+      if (!number && number !== 0) {
+        return ''
+      }
+
+      if (format === 'comma') {
+        return new Intl.NumberFormat('en-US').format(number)
+      } else if (format === 'usd') {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(number)
+      } else if (format === 'gbp') {
+        return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(number)
+      } else if (format === 'eur') {
+        return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(number)
+      } else if (format === 'dot') {
+        return new Intl.NumberFormat('de-DE').format(number)
+      } else if (format === 'space') {
+        return new Intl.NumberFormat('fr-FR').format(number)
+      } else if (format === 'percent') {
+        return `${number}%`
+      } else if (format === 'percent_space') {
+        return `${String(number).replace('.', ',')} %`
+      } else {
+        return number
+      }
+    },
+    formatDate (date, format, { withTimePlaceholders = false, utc = true } = {}) {
+      const monthFormats = { M: 'numeric', MM: '2-digit', MMM: 'short', MMMM: 'long' }
+      const dayFormats = { D: 'numeric', DD: '2-digit' }
+      const yearFormats = { YYYY: 'numeric', YYY: 'numeric', YY: '2-digit' }
+      const hourFormats = { H: 'numeric', HH: '2-digit', h: 'numeric', hh: '2-digit' }
+      const minuteFormats = { m: 'numeric', mm: '2-digit' }
+      const secondFormats = { s: 'numeric', ss: '2-digit' }
+
+      const hasTime = /[HhAasz]/.test(format)
+
+      const opts = {
+        day: dayFormats[format.match(/D+/)],
+        month: monthFormats[format.match(/M+/)],
+        year: yearFormats[format.match(/Y+/)]
+      }
+
+      if (format.match(/H+/)) { opts.hour = hourFormats[format.match(/H+/)[0]]; opts.hour12 = false }
+      if (format.match(/h+/)) { opts.hour = hourFormats[format.match(/h+/)[0]]; opts.hour12 = true }
+      if (/[Aa]/.test(format) && opts.hour12 === undefined) opts.hour12 = true
+      if (format.match(/m+/)) opts.minute = minuteFormats[format.match(/m+/)[0]]
+      if (format.match(/s+/)) opts.second = secondFormats[format.match(/s+/)[0]]
+      if (/z/.test(format)) opts.timeZoneName = 'short'
+      if (!hasTime && utc) opts.timeZone = 'UTC'
+
+      const partTypes = {
+        M: 'month',
+        D: 'day',
+        Y: 'year',
+        H: 'hour',
+        h: 'hour',
+        m: 'minute',
+        s: 'second',
+        z: 'timeZoneName',
+        A: 'dayPeriod',
+        a: 'dayPeriod'
+      }
+
+      const parts = new Intl.DateTimeFormat([], opts).formatToParts(date)
+
+      return format.replace(/MMMM|MMM|MM|M|DD|D|YYYY|YYY|YY|HH|hh|H|h|mm|m|ss|s|A|a|z/g, (token) => {
+        if (withTimePlaceholders && /^(HH|hh|H|h|mm|m|ss|s|A|a)$/.test(token)) return '--'
+
+        const value = parts.find((p) => p.type === partTypes[token[0]])?.value
+
+        if (token === 'A') return (value || '').toUpperCase()
+        if (token === 'a') return (value || '').toLowerCase()
+
+        return value
+      })
+    },
+    updateMultipleSelectValue (value) {
+      if (this.modelValue?.includes(value)) {
+        const newValue = [...this.modelValue]
+
+        newValue.splice(newValue.indexOf(value), 1)
+
+        this.$emit('update:model-value', newValue)
+      } else {
+        const newValue = this.modelValue ? [...this.modelValue] : []
+
+        newValue.push(value)
+
+        this.$emit('update:model-value', newValue)
+      }
+    }
+  }
+}
+</script>

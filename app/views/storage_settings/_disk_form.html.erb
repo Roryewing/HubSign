@@ -1,0 +1,16 @@
+<%= f.fields_for :value do |ff| %>
+  <%= ff.hidden_field :service, value: 'disk' %>
+<% end %>
+<div class="alert my-4">
+  <%= svg_icon('info_circle', class: 'stroke-current flex-shrink-0 w-6 h-6') %>
+  <div>
+    <p class="font-bold">
+      <%= t('store_all_files_on_disk') %>
+    </p>
+    <p class="text-gray-700">
+      <%= t('no_configs_are_needed_but_make_sure_your_disk_is_persistent') %>
+      <br>
+      <i>(<%= t('not_suitable_for_heroku_and_other_paas') %>)</i>
+    </p>
+  </div>
+</div>

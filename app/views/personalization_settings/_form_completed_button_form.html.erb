@@ -1,0 +1,26 @@
+<div class="collapse collapse-plus bg-base-200">
+  <input type="checkbox">
+  <div class="collapse-title text-xl font-medium">
+    <div>
+      <%= t('completed_form_redirect_button') %>
+    </div>
+  </div>
+  <div class="collapse-content">
+    <%= form_for AccountConfigs.find_or_initialize_for_key(current_account, AccountConfig::FORM_COMPLETED_BUTTON_KEY), url: settings_personalization_path, method: :post, html: { autocomplete: 'off', class: 'flex flex-col gap-4' } do |f| %>
+      <%= f.hidden_field :key %>
+      <%= f.fields_for :value, Struct.new(:title, :url).new(*(f.object.value || {}).values_at('title', 'url')) do |ff| %>
+        <div class="form-control">
+          <%= ff.label :title, t('button_title'), class: 'label' %>
+          <%= ff.text_field :title, class: 'base-input', dir: 'auto' %>
+        </div>
+        <div class="form-control">
+          <%= ff.label :url, t('button_url'), class: 'label' %>
+          <%= ff.url_field :url, class: 'base-input' %>
+        </div>
+      <% end %>
+      <div class="form-control pt-2">
+        <%= f.button button_title(title: t('save'), disabled_with: t('saving')), class: 'base-button' %>
+      </div>
+    <% end %>
+  </div>
+</div>

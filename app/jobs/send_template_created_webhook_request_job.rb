@@ -1,0 +1,37 @@
+# frozen_string_literal: true
+
+class SendTemplateCreatedWebhookRequestJob
+  include Sidekiq::Job
+
+  sidekiq_options queue: :webhooks
+
+  MAX_ATTEMPTS = 10
+
+  def perform(params = {})
+    template = Template.find_by(id: params['template_id'])
+
+    return unless template
+
+    webhook_url = WebhookUrl.find_by(id: params['webhook_url_id'])
+
+    return unless webhook_url
+
+    attempt = params['attempt'].to_i
+
+    return if webhook_url.url.blank? || webhook_url.events.exclude?('template.created')
+
+    resp = SendWebhookRequest.call(webhook_url, event_type: 'template.created',
+                                                event_uuid: params['event_uuid'],
+                                                record: template,
+                                                attempt:,
+                                                data: Templates::SerializeForApi.call(template))
+
+    return if attempt > MAX_ATTEMPTS || (resp && resp.status.to_i < 400)
+
+    SendTemplateCreatedWebhookRequestJob.perform_in((2**attempt).minutes, {
+                                                      **params,
+                                                      'attempt' => attempt + 1,
+                                                      'last_status' => resp&.status.to_i
+                                                    })
+  end
+end

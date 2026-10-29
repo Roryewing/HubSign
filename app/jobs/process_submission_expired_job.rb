@@ -1,0 +1,19 @@
+# frozen_string_literal: true
+
+class ProcessSubmissionExpiredJob
+  include Sidekiq::Job
+
+  def perform(params = {})
+    submission = Submission.find_by(id: params['submission_id'])
+
+    return unless submission
+
+    return if submission.archived_at?
+    return if submission.template&.archived_at?
+    return if submission.submitters.where.not(declined_at: nil).exists?
+    return if submission.completed_at?
+    return if params['expire_at'] && submission.expire_at&.to_i != params['expire_at']
+
+    WebhookUrls.enqueue_events(submission, 'submission.expired')
+  end
+end

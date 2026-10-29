@@ -1,0 +1,28 @@
+{
+  "ignored_warnings": [
+    {
+      "fingerprint": "de39648cd3f79d51e95e45f05fc77da49b0ad68bf80458061151016c0ef78208",
+      "note": "Permitted parameters are necessary for creating submitters via API"
+    },
+    {
+      "fingerprint": "58619647d807d5bedb9499d6b1432f7f9cee385167aa97b0cb5e1b31a3db3f40",
+      "note": "Safe SQL"
+    },
+    {
+      "fingerprint": "8538c7cca701df19fdc3c1c6c5b7b0a1a3acacc19c840d63147553014d60ffa0",
+      "note": "Safe SQL"
+    },
+    {
+      "fingerprint": "8bf010d01d5cfabdc2124db1378ca14a24a675431047291488abc186d10ba314",
+      "note": "Safe SQL"
+    },
+    {
+      "fingerprint": "f3a20210cde7b9cb5944d53505fe80fea502308416143f4da9ec2422f6b7035c",
+      "note": "Safe Param"
+    },
+    {
+      "fingerprint": "dbbfb4a4ace7f43d8247cbb44afa8b628e005e6194ca5552e029b200f725a2d5",
+      "message": "Unescaped find_by!(uuid: params[:id]) is not risky"
+    }
+  ]
+}

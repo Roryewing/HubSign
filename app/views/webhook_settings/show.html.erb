@@ -1,0 +1,152 @@
+<% content_for(:native_title, 'Webhook') if turbo_native_app? %>
+<div class="flex flex-wrap space-y-4 md:flex-nowrap md:space-y-0 md:space-x-10">
+  <%= render 'shared/settings_nav' %>
+  <div class="flex-grow">
+    <div class="flex flex-col gap-2 md:flex-row md:justify-between md:items-end mb-4">
+      <h1 class="text-3xl md:text-4xl font-bold">Webhook</h1>
+      <div class="flex flex-col gap-2 md:flex-row md:justify-between md:items-center">
+        <% if params[:action] == 'index' && (current_user == true_user || current_account.testing?) %>
+          <%= render 'shared/test_mode_toggle' %>
+        <% end %>
+        <% if @webhook_url.persisted? && params[:action] == 'index' %>
+          <%= link_to new_settings_webhook_path, class: 'md:ml-3 btn bg-white btn-outline btn-md gap-2 w-full md:w-fit', aria: { label: t('new_webhook') }, data: { turbo_frame: 'modal' } do %>
+            <%= svg_icon('plus', class: 'w-6 h-6') %>
+            <span><%= t('new_webhook') %></span>
+          <% end %>
+        <% end %>
+      </div>
+    </div>
+    <div class="card bg-base-200">
+      <div class="card-body p-6">
+        <div class="flex flex-col gap-2 md:flex-row md:justify-between md:items-end md:relative">
+          <%= label_tag :url, 'Webhook URL', class: 'text-sm font-semibold' %>
+          <% if @webhook_url.persisted? %>
+            <div class="flex items-center space-x-2 md:absolute md:right-0">
+              <%= link_to webhook_secret_path(@webhook_url), class: 'btn btn-outline btn-sm bg-white', aria: { label: t('webhook_security') }, data: { turbo_frame: 'modal' } do %>
+                <%= svg_icon('lock', class: 'w-4 h-4') %>
+                <span><%= t('security') %></span>
+              <% end %>
+              <div class="tooltip tooltip-left md:tooltip-top tooltip-no-touch" data-tip="<%= t('delete_webhook') %>">
+                <%= button_to settings_webhook_path(@webhook_url), class: 'btn btn-warning btn-sm', method: :delete, data: { turbo_confirm: t('are_you_sure_') } do %>
+                  <span><%= t('delete') %></span>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+        </div>
+        <%= form_for @webhook_url, url: @webhook_url.persisted? ? settings_webhook_path(@webhook_url) : settings_webhooks_path, html: { autocomplete: 'off' } do |f| %>
+          <div class="flex flex-row flex-wrap space-y-2 md:space-y-0 md:flex-nowrap md:space-x-2">
+            <%= f.url_field :url, class: 'input font-mono input-bordered w-full', placeholder: 'https://example.com/hook', required: true %>
+            <%= f.button button_title(title: t('save'), disabled_with: t('saving')), class: 'base-button w-full md:w-32' %>
+          </div>
+          <% unless @webhook_url.persisted? %>
+            <div class="space-y-4 mt-4">
+              <% WebhookUrl::EVENTS.group_by { |e| e.include?('form') }.each do |_, events| %>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-y-2">
+                  <%= f.collection_check_boxes(:events, events, :to_s, :to_s, include_hidden: false) do |b| %>
+                    <div class="flex">
+                      <label class="flex items-center space-x-2">
+                        <%= b.check_box class: 'base-checkbox', checked: @webhook_url.events.include?(b.value) %>
+                        <span>
+                          <%= b.label %>
+                        </span>
+                      </label>
+                    </div>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          <% end %>
+        <% end %>
+        <% if @webhook_url.persisted? %>
+          <%= form_for @webhook_url, url: webhook_preference_path(@webhook_url), method: :put, html: { autocomplete: 'off', class: 'mt-2' } do |f| %>
+            <div class="space-y-4">
+              <% WebhookUrl::EVENTS.group_by { |e| e.include?('form') }.each do |_, events| %>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-y-4">
+                  <% events.each do |event| %>
+                    <%= f.fields_for :events do |ff| %>
+                      <div class="flex">
+                        <label class="flex items-center cursor-pointer">
+                          <submit-form data-on="change" class="flex">
+                            <%= ff.check_box event, class: 'base-checkbox', checked: @webhook_url.events.include?(event) %>
+                          </submit-form>
+                          <span class="ml-2"><%= event %></span>
+                        </label>
+                      </div>
+                    <% end %>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+          <% end %>
+        <% end %>
+      </div>
+    </div>
+    <% if @webhook_events.present? || params[:status].present? %>
+      <div class="mt-6">
+        <h2 id="log" class="text-2xl md:text-3xl font-bold"><%= t('event_log') %></h2>
+        <div class="tabs border-b mt-4">
+          <%= link_to t('all'), url_for(params: request.query_parameters.except('status', 'page')), style: 'margin-bottom: -1px', class: "tab h-10 text-base #{params[:status].blank? ? 'tab-active tab-bordered' : 'pb-[3px]'}" %>
+          <%= link_to t('succeeded'), url_for(params: request.query_parameters.except('page').merge('status' => 'success')), style: 'margin-bottom: -1px', class: "tab h-10 text-base #{params[:status] == 'success' ? 'tab-active tab-bordered' : 'pb-[3px]'}" %>
+          <%= link_to t('failed'), url_for(params: request.query_parameters.except('page').merge('status' => 'error')), style: 'margin-bottom: -1px', class: "tab h-10 text-base #{params[:status] == 'error' ? 'tab-active tab-bordered' : 'pb-[3px]'}" %>
+        </div>
+        <% if @webhook_events.present? %>
+          <div class="divide-y divide-base-300 rounded-lg">
+            <%= render partial: 'webhook_events/event_row', collection: @webhook_events, as: :webhook_event, locals: { webhook_url: @webhook_url } %>
+          </div>
+        <% else %>
+          <div class="text-center py-4">
+            <%= t('there_are_no_events') %>
+          </div>
+        <% end %>
+        <% if @pagy.pages > 1 %>
+          <div class="flex my-4 justify-center md:justify-between">
+            <div class="hidden md:block text-sm">
+              <%= "#{@pagy.from}-#{@pagy.to} events" %>
+            </div>
+            <div class="flex items-center space-x-1.5">
+              <div class="join">
+                <% if @pagy.previous %>
+                  <%= link_to '«', url_for(params: request.query_parameters.merge('page' => @pagy.previous), anchor: 'log'), class: 'join-item btn min-h-full h-10' %>
+                <% else %>
+                  <span class="join-item btn btn-disabled !bg-base-200 min-h-full h-10">«</span>
+                <% end %>
+                <span class="join-item btn font-medium uppercase min-h-full h-10">
+                  <%= "Page #{@pagy.page}" %>
+                </span>
+                <% if @pagy.next %>
+                  <%= link_to '»', url_for(params: request.query_parameters.merge('page' => @pagy.next), anchor: 'log'), class: 'join-item btn min-h-full h-10' %>
+                <% else %>
+                  <span class="join-item btn btn-disabled !bg-base-200 min-h-full h-10">»</span>
+                <% end %>
+              </div>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    <% elsif (submitter = current_account.submitters.where.not(completed_at: nil).order(:id).last) && can?(:read, submitter) %>
+      <div class="space-y-4 mt-4">
+        <div class="collapse collapse-open bg-base-200 px-1">
+          <div class="p-4 text-xl font-medium">
+            <div class="flex flex-col gap-2 md:flex-row md:justify-between md:items-center md:h-8">
+              <span>
+                <%= t('submission_example_payload') %>
+              </span>
+              <% if @webhook_url.url.present? && @webhook_url.events.include?('form.completed') %>
+                <%= button_to button_title(title: 'Test Webhook', disabled_with: t('sending'), icon_disabled: svg_icon('loader', class: 'w-4 h-4 animate-spin')), settings_webhook_resend_path(@webhook_url), class: 'btn btn-neutral btn-outline btn-sm', method: :post %>
+              <% end %>
+            </div>
+          </div>
+          <div class="collapse-content" style="display: inherit">
+            <div class="mockup-code overflow-hidden relative">
+              <span class="top-0 right-0 absolute">
+                <%= render 'shared/clipboard_copy', icon: 'copy', text: code = JSON.pretty_generate({ event_type: 'form.completed', timestamp: Time.current.iso8601, data: Submitters::SerializeForWebhook.call(submitter) }).gsub(/^/, '  ').sub(/^\s+/, ''), class: 'btn btn-ghost text-white', icon_class: 'w-6 h-6 text-white', copy_title: t('copy'), copied_title: t('copied') %>
+              </span>
+              <pre><code class="overflow-hidden w-full"><%== HighlightCode.call(code, 'JSON', theme: 'base16.dark') %></code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    <% end %>
+  </div>
+</div>

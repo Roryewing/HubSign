@@ -1,0 +1,190 @@
+# frozen_string_literal: true
+
+# == Schema Information
+#
+# Table name: submissions
+#
+#  id                  :bigint           not null, primary key
+#  archived_at         :datetime
+#  completed_at        :datetime
+#  expire_at           :datetime
+#  name                :text
+#  preferences         :text             not null
+#  slug                :string           not null
+#  source              :string           not null
+#  submitters_order    :string           not null
+#  template_fields     :text
+#  template_schema     :text
+#  template_submitters :text
+#  variables           :text
+#  variables_schema    :text
+#  created_at          :datetime         not null
+#  updated_at          :datetime         not null
+#  account_id          :bigint           not null
+#  created_by_user_id  :bigint
+#  template_id         :bigint
+#
+# Indexes
+#
+#  index_submissions_on_account_id_and_completed_at                 (account_id,completed_at) WHERE ((completed_at IS NOT NULL) AND (archived_at IS NULL))
+#  index_submissions_on_account_id_and_id                           (account_id,id)
+#  index_submissions_on_account_id_and_id_pending                   (account_id,id) WHERE ((completed_at IS NULL) AND (archived_at IS NULL))
+#  index_submissions_on_account_id_and_template_id_and_id           (account_id,template_id,id) WHERE (archived_at IS NULL)
+#  index_submissions_on_account_id_and_template_id_and_id_archived  (account_id,template_id,id) WHERE (archived_at IS NOT NULL)
+#  index_submissions_on_created_at                                  (created_at)
+#  index_submissions_on_created_by_user_id                          (created_by_user_id)
+#  index_submissions_on_slug                                        (slug) UNIQUE
+#  index_submissions_on_template_id                                 (template_id)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (created_by_user_id => users.id)
+#  fk_rails_...  (template_id => templates.id)
+#
+class Submission < ApplicationRecord
+  belongs_to :template, optional: true
+  belongs_to :account
+  belongs_to :created_by_user, class_name: 'User', optional: true
+
+  has_one :search_entry, as: :record, inverse_of: :record, dependent: :destroy if SearchEntry.table_exists?
+
+  has_many :submitters, dependent: :destroy
+  has_many :submission_events, dependent: :destroy
+
+  attribute :preferences, :string, default: -> { {} }
+
+  serialize :template_fields, coder: JSON
+  serialize :template_schema, coder: JSON
+  serialize :template_submitters, coder: JSON
+  serialize :variables_schema, coder: JSON
+  serialize :variables, coder: JSON
+  serialize :preferences, coder: JSON
+
+  attribute :source, :string, default: 'link'
+  attribute :submitters_order, :string, default: 'random'
+
+  attribute :slug, :string, default: -> { SecureRandom.base58(14) }
+
+  has_one_attached :audit_trail
+  has_one_attached :combined_document
+  has_one_attached :merged_document
+  has_one_attached :preview_merged_document
+
+  has_many_attached :preview_documents
+  has_many_attached :documents
+
+  has_many :template_accesses, primary_key: :template_id, foreign_key: :template_id, dependent: nil, inverse_of: false
+
+  has_many :template_schema_documents,
+           ->(e) { where(uuid: (e.template_schema.presence || e.template.schema).pluck('attachment_uuid')) },
+           through: :template, source: :documents_attachments
+
+  has_many :template_schema_static_documents,
+           ->(e) { where(uuid: e.template_schema.reject { |s| s['dynamic'] }.pluck('attachment_uuid')) },
+           through: :template, source: :documents_attachments
+
+  has_many :template_schema_dynamic_document_versions,
+           ->(e) { where(sha1: e.template_schema.select { |s| s['dynamic'] }.pluck('dynamic_document_sha1')) },
+           through: :template, source: :dynamic_document_versions
+
+  has_many :template_schema_dynamic_document_attachments,
+           through: :template_schema_dynamic_document_versions, source: :document_attachment
+
+  scope :active, -> { where(archived_at: nil) }
+  scope :archived, -> { where.not(archived_at: nil) }
+  scope :non_expired, -> { where(expire_at: nil).or(where(expire_at: Time.current..)) }
+  scope :pending, -> { non_expired.where(completed_at: nil) }
+  scope :completed, -> { where.not(completed_at: nil) }
+  scope :declined, lambda {
+    where(Submitter.where(Submitter.arel_table[:submission_id].eq(Submission.arel_table[:id]))
+                   .where.not(declined_at: nil).limit(1).arel.exists)
+  }
+  scope :expired, -> { where(expire_at: ..Time.current).where(completed_at: nil) }
+
+  scope :select_for_list, lambda {
+    select(:id, :name, :created_by_user_id, :account_id, :completed_at,
+           :created_at, :archived_at, :expire_at, :template_id, :template_submitters)
+  }
+
+  enum :source, {
+    invite: 'invite',
+    bulk: 'bulk',
+    api: 'api',
+    embed: 'embed',
+    mcp: 'mcp',
+    link: 'link',
+    self: 'self'
+  }, scope: false, prefix: true
+
+  enum :submitters_order, {
+    random: 'random',
+    preserved: 'preserved'
+  }, scope: false, prefix: true
+
+  def expired?
+    expire_at && expire_at <= Time.current
+  end
+
+  def schema_documents
+    return documents_attachments unless template_id?
+
+    dynamic_count = template_schema&.count { |e| e['dynamic'] }.to_i
+
+    if variables_schema.blank?
+      if dynamic_count > 0
+        if dynamic_count == template_schema.size
+          template_schema_dynamic_document_attachments
+        else
+          template_schema_dynamic_and_static_document_attachments
+        end
+      else
+        template_schema_documents
+      end
+    elsif dynamic_count > 0 && dynamic_count != template_schema.size
+      template_schema_submission_dynamic_and_static_document_attachments
+    else
+      documents_attachments
+    end
+  end
+
+  def template_schema_submission_dynamic_and_static_document_attachments
+    @template_schema_submission_dynamic_and_static_document_attachments ||=
+      ActiveStorage::Attachment.where(
+        ActiveStorage::Attachment.arel_table[:id].in(
+          template_schema_static_documents.select(:id).arel.union(
+            :all,
+            documents_attachments.select(:id).arel
+          )
+        )
+      )
+  end
+
+  def template_schema_dynamic_and_static_document_attachments
+    @template_schema_dynamic_and_static_document_attachments ||=
+      ActiveStorage::Attachment.where(
+        ActiveStorage::Attachment.arel_table[:id].in(
+          template_schema_static_documents.select(:id).arel.union(
+            :all,
+            template_schema_dynamic_document_attachments.select(:id).arel
+          )
+        )
+      )
+  end
+
+  def fields_uuid_index
+    @fields_uuid_index ||= (template_fields || template.fields).index_by { |f| f['uuid'] }
+  end
+
+  def audit_trail_url(expires_at: nil)
+    return if audit_trail.blank?
+
+    ActiveStorage::Blob.proxy_url(audit_trail.blob, expires_at:)
+  end
+  alias audit_log_url audit_trail_url
+
+  def combined_document_url(expires_at: nil)
+    return if combined_document.blank?
+
+    ActiveStorage::Blob.proxy_url(combined_document.blob, expires_at:)
+  end
+end
