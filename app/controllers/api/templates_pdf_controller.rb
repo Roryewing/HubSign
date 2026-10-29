@@ -64,7 +64,7 @@ module Api
 
       {
         'uuid' => SecureRandom.uuid, 'submitter_uuid' => submitter['uuid'], 'name' => field[:name].to_s, 'type' => type,
-        'required' => field[:required] != false, 'preferences' => (field[:preferences] || {}).to_unsafe_h,
+        'required' => field[:required] != false, 'preferences' => field[:preferences].try(:to_unsafe_h) || {},
         'areas' => Array(field[:areas]).map do |a|
           attachment = attachments[a[:document].to_i] or raise ArgumentError, "unknown document: #{a[:document]}"
           { 'attachment_uuid' => attachment.uuid, 'page' => a[:page].to_i,
