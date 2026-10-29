@@ -1,0 +1,19 @@
+<%= form_for config, url: settings_notifications_path, method: :post, html: { autocomplete: 'off', class: 'space-y-4' } do |f| %>
+  <%= f.hidden_field :key %>
+  <div class="form-control">
+    <%= f.label :value, class: 'label' do %>
+      <span class="flex items-center space-x-1">
+        <span>
+          <%= t('completed_documents_notification_bcc_address') %>
+        </span>
+        <span class="tooltip hidden md:inline-flex" data-tip="<%= t('send_email_copy_with_completed_documents_to_a_specified_bcc_address') %>">
+          <%= svg_icon('info_circle', class: 'w-4 h-4') %>
+        </span>
+      </span>
+    <% end %>
+    <%= tag.input type: 'email', multiple: true, name: 'account_config[value]', autocomplete: 'off', class: 'base-input', value: f.object.value %>
+  </div>
+  <div class="form-control pt-2">
+    <%= f.button button_title(title: t('save'), disabled_with: t('updating')), class: 'base-button' %>
+  </div>
+<% end %>

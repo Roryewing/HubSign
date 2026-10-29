@@ -1,0 +1,162 @@
+# frozen_string_literal: true
+
+module Submissions
+  module GenerateExportFiles
+    UnknownFormat = Class.new(StandardError)
+
+    module_function
+
+    def call(submissions, format: :csv, expires_at: nil)
+      rows = build_table_rows(submissions, expires_at:)
+
+      if format.to_sym == :csv
+        rows_to_csv(rows)
+      elsif format.to_sym == :xlsx
+        rows_to_xlsx(rows)
+      else
+        raise UnknownFormat
+      end
+    end
+
+    def rows_to_xlsx(rows)
+      headers = build_headers(rows)
+
+      io = StringIO.new
+
+      Xlsxtream::Workbook.open(io) do |workbook|
+        workbook.write_worksheet(Time.current.to_date.to_s) do |sheet|
+          sheet << headers.to_a
+
+          rows.each { |row| sheet << extract_columns(row, headers) }
+        end
+      end
+
+      io.string
+    end
+
+    def rows_to_csv(rows)
+      headers = build_headers(rows)
+
+      CSVSafe.generate do |csv|
+        csv << headers
+
+        rows.each do |row|
+          csv << extract_columns(row, headers)
+        end
+      end
+    end
+
+    def build_headers(rows)
+      rows.reduce(Set.new) { |acc, row| acc + row.pluck(:name) }
+    end
+
+    def extract_columns(row, headers)
+      headers.map { |key| row.find { |e| e[:name] == key }&.dig(:value) }
+    end
+
+    def build_table_rows(submissions, expires_at: nil)
+      submissions.preload(submitters: [{ attachments_attachments: :blob, documents_attachments: :blob }])
+                 .find_each.map do |submission|
+        submission_data = []
+        submitters_count = submission.submitters.size
+
+        submission.submitters.each do |submitter|
+          template_submitters = submission.template_submitters || submission.template.submitters
+          submitter_name = template_submitters.find { |s| s['uuid'] == submitter.uuid }['name']
+
+          submission_data += build_submission_data(submitter, submitter_name, submitters_count)
+
+          submission_data += submitter_formatted_fields(submitter, expires_at:).map do |field|
+            {
+              name: column_name(field[:name], submitter_name, submitters_count),
+              value: field[:value]
+            }
+          end
+
+          next if submitter != submission.submitters.select(&:completed_at?).max_by(&:completed_at)
+
+          submission_data += submitter.documents.map.with_index(1) do |attachment, index|
+            {
+              name: "#{I18n.t('document')} #{index}",
+              value: ActiveStorage::Blob.proxy_url(attachment.blob, expires_at:)
+            }
+          end
+        end
+
+        submission_data
+      end
+    end
+
+    def build_submission_data(submitter, submitter_name, submitters_count)
+      [
+        {
+          name: column_name(I18n.t('name'), submitter_name, submitters_count),
+          value: submitter.name
+        },
+        {
+          name: column_name(I18n.t('email'), submitter_name, submitters_count),
+          value: submitter.email
+        },
+        {
+          name: column_name(I18n.t('phone'), submitter_name, submitters_count),
+          value: submitter.phone
+        },
+        {
+          name: column_name(I18n.t('status'), submitter_name, submitters_count),
+          value: submitter.status
+        },
+        {
+          name: column_name(I18n.t('completed_at'), submitter_name, submitters_count),
+          value: submitter.completed_at.to_s
+        },
+        {
+          name: column_name(I18n.t('link'), submitter_name, submitters_count),
+          value: submitter.completed_at? ? nil : r.submit_form_url(slug: submitter.slug, **Docuseal.default_url_options)
+        }
+      ].reject { |e| e[:value].blank? }
+    end
+
+    def column_name(name, submitter_name, submitters_count = 1)
+      submitters_count > 1 ? "#{submitter_name} - #{name}" : name
+    end
+
+    def submitter_formatted_fields(submitter, expires_at: nil)
+      fields = submitter.submission.template_fields || submitter.submission.template.fields
+
+      template_fields = fields.select { |f| f['submitter_uuid'] == submitter.uuid }
+
+      attachments_index = submitter.attachments.index_by(&:uuid)
+
+      template_field_counters = Hash.new { 0 }
+      template_fields.map do |template_field|
+        submitter_value = submitter.values.fetch(template_field['uuid'], nil)
+        template_field_type = template_field['type']
+        template_field_counters[template_field_type] += 1
+        template_field_name = template_field['name'].presence
+        template_field_name ||=
+          "#{I18n.t("#{template_field_type}_field")} #{template_field_counters[template_field_type]}"
+
+        value =
+          if template_field_type.in?(%w[image signature])
+            attachment = attachments_index[submitter_value]
+
+            ActiveStorage::Blob.proxy_url(attachment.blob, expires_at:) if attachment
+          elsif template_field_type == 'file'
+            Array.wrap(submitter_value).compact_blank.filter_map do |e|
+              attachment = attachments_index[e]
+
+              ActiveStorage::Blob.proxy_url(attachment.blob, expires_at:) if attachment
+            end
+          else
+            submitter_value
+          end
+
+        { name: template_field_name, uuid: template_field['uuid'], value: }
+      end
+    end
+
+    def r
+      Rails.application.routes.url_helpers
+    end
+  end
+end

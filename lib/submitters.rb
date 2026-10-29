@@ -1,0 +1,346 @@
+# frozen_string_literal: true
+
+module Submitters
+  TRUE_VALUES = ['1', 'true', true].freeze
+
+  FIELD_NAME_WEIGHTS = {
+    'email' => 'A',
+    'phone' => 'B',
+    'name' => 'C',
+    'values' => 'D'
+  }.freeze
+
+  UnableToSendCode = Class.new(StandardError)
+  BouncedEmail = Class.new(UnableToSendCode)
+  InvalidOtp = Class.new(StandardError)
+  MaliciousFileExtension = Class.new(StandardError)
+  ParamsError = Class.new(StandardError)
+
+  FILES_TTL = 5.minutes
+
+  module_function
+
+  def search(current_user, submitters, keyword)
+    if Docuseal.fulltext_search?
+      fulltext_search(current_user, submitters, keyword)
+    else
+      plain_search(submitters, keyword)
+    end
+  end
+
+  def fulltext_search(current_user, submitters, keyword)
+    return submitters if keyword.blank?
+
+    submitters.where(
+      id: SearchEntry.where(record_type: 'Submitter')
+                     .where(account_id: current_user.account_id)
+                     .where(*SearchEntries.build_tsquery(keyword))
+                     .select(:record_id)
+    )
+  end
+
+  def fulltext_search_field(current_user, submitters, keyword, field_name)
+    keyword = keyword.delete("\0").tr('\\', ' ').squish
+
+    return submitters.none if keyword.blank?
+
+    weight = FIELD_NAME_WEIGHTS[field_name]
+
+    return submitters.none if weight.blank?
+
+    query =
+      if keyword.match?(/\d/) && !keyword.match?(/\p{L}/)
+        number = keyword.gsub(/\D/, '')
+
+        sql =
+          if number.length <= 2
+            "ngram @@ ((quote_literal(?) || ':' || ?)::tsquery || (quote_literal(?) || ':' || ?)::tsquery)"
+          else
+            "tsvector @@ ((quote_literal(?) || ':*' || ?)::tsquery || (quote_literal(?) || ':*' || ?)::tsquery)"
+          end
+
+        [sql, number, weight, number.length > 1 ? number.delete_prefix('0') : number, weight]
+      elsif keyword.match?(/[^\p{L}\d&@.-]/) || keyword.match?(/[.-]{2,}/)
+        terms = TextUtils.transliterate(keyword.downcase).split(/\b/).map(&:squish).compact_blank.uniq
+
+        if terms.size > 1
+          SearchEntries.build_weights_tsquery(terms, weight)
+        else
+          SearchEntries.build_weights_wildcard_tsquery(keyword, weight)
+        end
+      else
+        SearchEntries.build_weights_wildcard_tsquery(keyword, weight)
+      end
+
+    submitter_ids = SearchEntry.where(record_type: 'Submitter')
+                               .where(account_id: current_user.account_id)
+                               .where(*query)
+                               .limit(keyword.strip.length > 2 ? 500 : 5000)
+                               .pluck(:record_id)
+
+    submitters.where(id: submitter_ids.first(100))
+  end
+
+  def plain_search(submitters, keyword)
+    return submitters if keyword.blank?
+
+    sanitized = ActiveRecord::Base.sanitize_sql_like(keyword.downcase)
+    term = "%#{sanitized}%"
+
+    arel_table = Submitter.arel_table
+
+    arel = arel_table[:email].lower.matches(term)
+                             .or(arel_table[:phone].matches(term))
+                             .or(arel_table[:name].lower.matches(term))
+
+    submitters.where(arel)
+  end
+
+  def select_attachments_for_download(submitter)
+    if AccountConfig.exists?(account_id: submitter.account_id,
+                             key: AccountConfig::COMBINE_PDF_RESULT_KEY,
+                             value: true) &&
+       submitter.submission.completed_at? &&
+       submitter.submission.template_fields.none? { |f| f['type'] == 'verification' }
+      return [submitter.submission.combined_document_attachment || Submissions::EnsureCombinedGenerated.call(submitter)]
+    end
+
+    original_documents = submitter.submission.schema_documents.preload(:blob)
+    is_more_than_two_images = original_documents.many?(&:image?)
+
+    submitter.documents.preload(:blob).reject do |attachment|
+      is_more_than_two_images &&
+        original_documents.find { |a| a.uuid == (attachment.metadata['original_uuid'] || attachment.uuid) }&.image?
+    end
+  end
+
+  def create_attachment!(submitter, file, metadata: {})
+    raise ParamsError, 'file param is missing' if file.blank?
+
+    extension = FilenameUtils.dangerous_extension(file.original_filename)
+
+    raise MaliciousFileExtension, "File type '.#{extension}' is not allowed." if extension
+
+    blob = ActiveStorage::Blob.create_and_upload!(io: file.tap(&:rewind).open,
+                                                  filename: file.original_filename,
+                                                  content_type: file.content_type,
+                                                  metadata:)
+
+    ActiveStorage::Attachment.create!(blob:, name: 'attachments', record: submitter)
+  end
+
+  def build_prefill_attachment_data(submitter, attachment)
+    token = ApplicationRecord.signed_id_verifier.generate([attachment.uuid, submitter.slug],
+                                                          purpose: :prefill_attachment)
+
+    { token:, url: attachment.url }
+  end
+
+  def normalize_preferences(account, user, params)
+    preferences = {}
+
+    message_params = (params['message'].presence || params.slice('subject', 'body')).compact_blank
+
+    if message_params.present?
+      email_message = EmailMessages.find_or_create_for_account_user(account, user,
+                                                                    message_params['subject'],
+                                                                    message_params['body'])
+    end
+
+    preferences['email_message_uuid'] = email_message.uuid if email_message
+    preferences['send_email'] = params['send_email'].in?(TRUE_VALUES) if params.key?('send_email')
+    preferences['send_sms'] = params['send_sms'].in?(TRUE_VALUES) if params.key?('send_sms')
+    preferences['require_phone_2fa'] = params['require_phone_2fa'].in?(TRUE_VALUES) if params.key?('require_phone_2fa')
+    preferences['require_email_2fa'] = params['require_email_2fa'].in?(TRUE_VALUES) if params.key?('require_email_2fa')
+    preferences['bcc_completed'] = normalize_bcc_completed(params['bcc_completed']) if params.key?('bcc_completed')
+    preferences['reply_to'] = params['reply_to'] if params.key?('reply_to')
+    preferences['go_to_last'] = params['go_to_last'] if params.key?('go_to_last')
+    preferences['completed_redirect_url'] = params['completed_redirect_url'] if params.key?('completed_redirect_url')
+
+    preferences
+  end
+
+  def normalize_bcc_completed(value)
+    if value.is_a?(Array)
+      value.compact_blank.uniq.join(', ')
+    else
+      value
+    end
+  end
+
+  def fetch_values_for_delegate(submitter)
+    fields = submitter.submission.template_fields || submitter.template.fields
+    default_values = submitter.preferences['default_values'] || {}
+
+    field_uuids = fields.filter_map do |field|
+      next if field['submitter_uuid'] != submitter.uuid
+      next unless field['type'].in?(%w[signature phone verification kba initials])
+      next if default_values[field['uuid']].present?
+
+      field['uuid']
+    end
+
+    submitter.values.except(*field_uuids)
+  end
+
+  def send_signature_requests(submitters, delay_seconds: nil)
+    submitters.each_with_index do |submitter, index|
+      next if submitter.email.blank?
+      next if submitter.declined_at?
+      next if submitter.preferences['send_email'] == false
+
+      if delay_seconds
+        SendSubmitterInvitationEmailJob.perform_in((delay_seconds + index).seconds, 'submitter_id' => submitter.id)
+      else
+        SendSubmitterInvitationEmailJob.perform_async('submitter_id' => submitter.id)
+      end
+    end
+  end
+
+  # rubocop:disable Metrics
+  def current_submitter_order?(submitter)
+    submission = submitter.submission
+
+    submitter_items = submission.template_submitters || submission.template.submitters
+
+    before_items =
+      if submitter_items.any? { |s| s['order'] }
+        submitter_groups = submitter_items.group_by.with_index { |s, index| s['order'] || index }.sort_by(&:first)
+
+        current_group_index = submitter_groups.find_index { |_, group| group.any? { |s| s['uuid'] == submitter.uuid } }
+
+        submitter_groups.first(current_group_index).flat_map(&:last)
+      elsif submitter.viewer?
+        current_index = submitter_items.find_index { |e| e['uuid'] == submitter.uuid }
+
+        preceding_submitter_index = submitter_items[0...current_index].rindex do |e|
+          !submission.submitters.find { |s| s.uuid == e['uuid'] }&.viewer?
+        end
+
+        submitter_items.first(preceding_submitter_index || 0)
+      else
+        submitter_items.first(submitter_items.find_index { |e| e['uuid'] == submitter.uuid })
+      end
+
+    before_items.all? do |item|
+      submitter = submission.submitters.find { |e| e.uuid == item['uuid'] }
+
+      submitter.nil? || submitter.viewer? || submitter.completed_at?
+    end
+  end
+  # rubocop:enable Metrics
+
+  def build_document_filename(submitter, blob, filename_format)
+    return blob.filename.to_s if filename_format.blank?
+
+    filename = filename_format.gsub('{document.name}', blob.filename.base)
+    filename = ReplaceEmailVariables.call(filename, submitter:)
+
+    filename = filename.gsub(' - {submission.status}') do
+      if submitter.submission.completed_at?
+        status =
+          if submitter.submission.template_fields.any? { |f| f['type'] == 'signature' }
+            I18n.t(:signed)
+          else
+            I18n.t(:completed)
+          end
+
+        " - #{status}"
+      end
+    end
+
+    filename = filename.gsub('{submission.completed_at}') do
+      completed_at = submitter.submission.completed_at ||
+                     submitter.submission.submitters.select(&:completed_at).max_by(&:completed_at).completed_at
+
+      I18n.l(completed_at.in_time_zone(submitter.account.timezone), format: :short)
+    end
+
+    "#{filename}.#{blob.filename.extension}".tr('/', '-')
+  end
+
+  def send_shared_link_email_verification_code(submitter, request:)
+    raise UnableToSendCode, I18n.t(:provide_your_email) if submitter.email.to_s.count('@') > 1
+
+    RateLimit.call("send-otp-code-#{request.remote_ip}", limit: 2, ttl: 45.seconds, enabled: true)
+
+    if Docuseal.multitenant? && email_bounced_recently?(submitter.email)
+      Rollbar.warning("Bounced OTP email for template: #{submitter.submission.template.id}") if defined?(Rollbar)
+
+      raise BouncedEmail, I18n.t(:verification_email_bounced)
+    end
+
+    TemplateMailer.otp_verification_email(submitter.submission.template, email: submitter.email).deliver_later!
+  rescue RateLimit::LimitApproached
+    Rollbar.warning("Limit verification code for template: #{submitter.submission.template.id}") if defined?(Rollbar)
+
+    raise UnableToSendCode, I18n.t('too_many_attempts')
+  end
+
+  def email_bounced_recently?(email)
+    EmailEvent.exists?(email:, event_type: %w[bounce soft_bounce permanent_bounce],
+                       event_datetime: 24.hours.ago..Time.current)
+  end
+
+  def verify_link_otp!(otp, submitter)
+    return false if otp.blank?
+
+    email_digest = Digest::MD5.base64digest(submitter.email.downcase.squish)
+
+    RateLimit.call("verify-2fa-code-#{email_digest}", limit: 2, ttl: 45.seconds, enabled: true)
+
+    link_2fa_key = [submitter.email.downcase.squish, submitter.submission.template.slug].join(':')
+
+    unless OtpChallenges.verify(otp.to_s.gsub(/\D/, ''), link_2fa_key, purpose: 'form_email_2fa')
+      raise InvalidOtp, I18n.t(:invalid_code)
+    end
+
+    true
+  end
+
+  def build_document_urls(submitter, ttl: FILES_TTL)
+    filename_format = AccountConfig.find_or_initialize_by(account_id: submitter.account_id,
+                                                          key: AccountConfig::DOCUMENT_FILENAME_FORMAT_KEY)&.value
+
+    select_attachments_for_download(submitter).map do |attachment|
+      ActiveStorage::Blob.proxy_path(
+        attachment.blob,
+        expires_at: ttl.from_now.to_i,
+        filename: build_document_filename(submitter, attachment.blob, filename_format)
+      )
+    end
+  end
+
+  def build_combined_url(submitter, ttl: FILES_TTL)
+    return unless submitter.submission.completed_at?
+    return if submitter.submission.submitters.completed.order(:completed_at).last != submitter
+
+    attachment = submitter.submission.combined_document_attachment
+    attachment ||= Submissions::EnsureCombinedGenerated.call(submitter)
+
+    filename_format = AccountConfig.find_or_initialize_by(account_id: submitter.account_id,
+                                                          key: AccountConfig::DOCUMENT_FILENAME_FORMAT_KEY)&.value
+
+    ActiveStorage::Blob.proxy_path(
+      attachment.blob,
+      expires_at: ttl.from_now.to_i,
+      filename: build_document_filename(submitter, attachment.blob, filename_format)
+    )
+  end
+
+  def populate_completed_is_first
+    Account.find_each do |account|
+      submissions_index = {}
+
+      CompletedSubmitter.where(account_id: account.id).order(:account_id, :completed_at).each do |cs|
+        submissions_index[cs.submission_id] ||= cs.submitter_id
+
+        cs.update_columns(is_first: submissions_index[cs.submission_id] == cs.submitter_id)
+      rescue ActiveRecord::RecordNotUnique
+        CompletedSubmitter.where(submission_id: cs.submission_id).update_all(is_first: false)
+
+        cs.update_columns(is_first: submissions_index[cs.submission_id] == cs.submitter_id)
+      end
+    end
+  end
+end

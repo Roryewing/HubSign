@@ -1,0 +1,80 @@
+@config "../../tailwind.form.config.js";
+
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+a[href],
+input[type='checkbox'],
+input[type='submit'],
+input[type='image'],
+input[type='radio'],
+label[for],
+select,
+button {
+  cursor: pointer;
+}
+
+button .disabled {
+  display: none;
+}
+
+button[disabled] .disabled, button.btn-disabled .disabled {
+  display: initial;
+}
+
+button .enabled {
+  display: initial;
+}
+
+button[disabled] .enabled, button.btn-disabled .enabled {
+  display: none;
+}
+
+.input-bordered {
+  @apply border-base-content/20;
+}
+
+.select-bordered {
+  @apply border-base-content/20;
+}
+
+.textarea-bordered {
+  @apply border-base-content/20;
+}
+
+.base-textarea {
+  @apply textarea textarea-bordered bg-white rounded-3xl;
+}
+
+.btn {
+  @apply no-animation;
+}
+
+.base-input {
+  @apply input input-bordered bg-white;
+}
+
+.base-button {
+  @apply btn btn-neutral text-white text-base;
+}
+
+.white-button {
+  @apply btn btn-outline text-base bg-white border-2;
+}
+
+.base-checkbox {
+  @apply checkbox rounded bg-white checkbox-sm;
+}
+
+.base-radio {
+  @apply radio bg-white radio-sm;
+}
+
+.font-times {
+  font-family: "Times New Roman", Times, ui-serif, serif, Cambria, Georgia;
+}
+
+.font-courier {
+  font-family: "Courier New", Consolas, "Liberation Mono", monospace, ui-monospace, SFMono-Regular, Menlo, Monaco;
+}

@@ -1,0 +1,38 @@
+disk:
+  service: Disk
+  root: <%= ENV['WORKDIR'] || '.' %>/attachments
+  public: <%= ENV['ACTIVE_STORAGE_PUBLIC'] == 'true' %>
+
+aws_s3:
+  service: S3
+  access_key_id: <%= ENV['AWS_ACCESS_KEY_ID'] %>
+  secret_access_key: <%= ENV['AWS_SECRET_ACCESS_KEY'] %>
+  region: <%= ENV['AWS_REGION'] || 'us-east-1' %>
+  bucket: <%= ENV['S3_ATTACHMENTS_BUCKET'] %>
+  <% if !ENV['S3_ENDPOINT'].to_s.empty? %>
+  endpoint: <%= ENV['S3_ENDPOINT'] %>
+  force_path_style: true
+  <% end %>
+  public: <%= ENV['ACTIVE_STORAGE_PUBLIC'] == 'true' %>
+  upload:
+    cache_control: 'public, max-age=31536000'
+
+google:
+  service: GCS
+  credentials: <%= ENV['GCS_CREDENTIALS'] || '{}' %>
+  project: <%= ENV['GCS_PROJECT'] %>
+  bucket: <%= ENV['GCS_BUCKET'] %>
+  public: <%= ENV['ACTIVE_STORAGE_PUBLIC'] == 'true' %>
+  cache_control: "public, max-age=31536000"
+
+azure:
+  service: AzureBlob
+  storage_account_name: <%= ENV['AZURE_STORAGE_ACCOUNT_NAME'] %>
+  storage_access_key: <%= ENV['AZURE_STORAGE_ACCESS_KEY'] %>
+  container: <%= ENV['AZURE_CONTAINER'] %>
+  public: <%= ENV['ACTIVE_STORAGE_PUBLIC'] == 'true' %>
+
+test:
+  service: Disk
+  root: <%= Rails.root.join("tmp/storage") %>
+  public: true

@@ -1,0 +1,32 @@
+export default class extends HTMLElement {
+  connectedCallback () {
+    this.clearChecked()
+
+    this.addEventListener('click', (e) => {
+      const text = this.dataset.text || this.innerText.trim()
+      const download = window.webkit?.messageHandlers?.download
+
+      if (download && /^https?:\/\//.test(text)) {
+        e.preventDefault()
+
+        return download.postMessage({ url: text })
+      }
+
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => {
+          window.webkit?.messageHandlers?.flash?.postMessage({ style: 'notice', message: this.dataset.copied })
+        })
+      } else {
+        if (e.target.tagName !== 'INPUT') {
+          alert(`Clipboard not available. Make sure you're using https://\nCopy text: ${text}`)
+        }
+      }
+    })
+  }
+
+  clearChecked () {
+    this.querySelectorAll('input').forEach((e) => {
+      e.checked = false
+    })
+  }
+}

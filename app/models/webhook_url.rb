@@ -1,0 +1,62 @@
+# frozen_string_literal: true
+
+# == Schema Information
+#
+# Table name: webhook_urls
+#
+#  id          :bigint           not null, primary key
+#  events      :text             not null
+#  hmac_secret :text             not null
+#  secret      :text             not null
+#  sha1        :string           not null
+#  url         :text             not null
+#  created_at  :datetime         not null
+#  updated_at  :datetime         not null
+#  account_id  :bigint           not null
+#
+# Indexes
+#
+#  index_webhook_urls_on_account_id  (account_id)
+#  index_webhook_urls_on_sha1        (sha1)
+#
+# Foreign Keys
+#
+#  fk_rails_...  (account_id => accounts.id)
+#
+class WebhookUrl < ApplicationRecord
+  EVENTS = %w[
+    form.viewed
+    form.started
+    form.completed
+    form.declined
+    submission.created
+    submission.completed
+    submission.expired
+    submission.archived
+    template.created
+    template.updated
+    template.archived
+  ].freeze
+
+  belongs_to :account
+  has_many :webhook_events, dependent: nil
+
+  attribute :events, :string, default: -> { %w[form.viewed form.started form.completed form.declined] }
+  attribute :secret, :string, default: -> { {} }
+
+  serialize :events, coder: JSON
+  serialize :secret, coder: JSON
+
+  before_validation :set_sha1
+  before_validation :set_hmac_secret
+
+  encrypts :url, :secret, :hmac_secret
+
+  def set_sha1
+    self.sha1 = Digest::SHA1.hexdigest(url)
+  end
+
+  def set_hmac_secret
+    self.hmac_secret ||= WebhookUrls::Signatures.generate_secret
+  end
+end

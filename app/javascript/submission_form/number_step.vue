@@ -1,0 +1,95 @@
+<template>
+  <label
+    v-if="showFieldNames && (field.name || field.title)"
+    :for="field.uuid"
+    dir="auto"
+    class="label text-xl sm:text-2xl py-0 mb-2 sm:mb-3.5 field-name-label"
+    :class="{ 'mb-2': !field.description }"
+  >
+    <MarkdownContent
+      v-if="field.title"
+      :string="field.title"
+    />
+    <template v-else>{{ field.name }}</template>
+    <template v-if="!field.required">
+      <span :class="{ 'hidden sm:inline': (field.title || field.name).length > 20 }">
+        ({{ t('optional') }})
+      </span>
+    </template>
+  </label>
+  <div
+    v-else
+    class="py-1"
+  />
+  <div
+    v-if="field.description"
+    :id="field.uuid + '-desc'"
+    dir="auto"
+    class="mb-3 px-1 field-description-text"
+  >
+    <MarkdownContent :string="field.description" />
+  </div>
+  <AppearsOn :field="field" />
+  <div class="items-center flex">
+    <input
+      type="hidden"
+      name="cast_number"
+      value="true"
+    >
+    <input
+      :id="field.uuid"
+      v-model="number"
+      type="number"
+      :step="field.validation?.step || 'any'"
+      :min="field.validation?.min"
+      :max="field.validation?.max"
+      class="base-input !text-2xl w-full"
+      :required="field.required"
+      :aria-describedby="field.description ? field.uuid + '-desc' : undefined"
+      :placeholder="`${t('type_here_')}${field.required ? '' : ` (${t('optional')})`}`"
+      :name="`values[${field.uuid}]`"
+      @focus="$emit('focus')"
+    >
+  </div>
+</template>
+
+<script>
+import AppearsOn from './appears_on'
+import MarkdownContent from './markdown_content'
+
+export default {
+  name: 'TextStep',
+  components: {
+    AppearsOn,
+    MarkdownContent
+  },
+  inject: ['t'],
+  props: {
+    field: {
+      type: Object,
+      required: true
+    },
+    showFieldNames: {
+      type: Boolean,
+      required: false,
+      default: true
+    },
+    modelValue: {
+      type: [String, Number],
+      required: false,
+      default: ''
+    }
+  },
+  emits: ['update:model-value', 'focus'],
+  computed: {
+    number: {
+      set (value) {
+        this.$emit('update:model-value', value)
+      },
+      get () {
+        return this.modelValue
+      }
+    }
+  }
+}
+</script>

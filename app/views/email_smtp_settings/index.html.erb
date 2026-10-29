@@ -1,0 +1,68 @@
+<% content_for(:native_title, t('email')) if turbo_native_app? %>
+<div class="flex flex-wrap space-y-4 md:flex-nowrap md:space-y-0">
+  <%= render 'shared/settings_nav' %>
+  <div class="flex-grow max-w-xl mx-auto min-w-0">
+    <h1 class="text-3xl md:text-4xl font-bold mb-4">Email SMTP</h1>
+    <% value = @encrypted_config.value || {} %>
+    <%= form_for @encrypted_config, url: settings_email_index_path, method: :post, html: { autocomplete: 'off', class: 'space-y-4' } do |f| %>
+      <%= f.fields_for :value do |ff| %>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="form-control">
+            <%= ff.label :host, 'Host', class: 'label' %>
+            <%= ff.text_field :host, value: value['host'], required: true, class: 'base-input' %>
+          </div>
+          <div class="form-control">
+            <%= ff.label :port, 'Port', class: 'label' %>
+            <%= ff.text_field :port, value: value['port'], required: true, class: 'base-input' %>
+          </div>
+        </div>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="form-control">
+            <%= ff.label :username, 'Username', class: 'label' %>
+            <%= ff.text_field :username, value: value['username'], class: 'base-input' %>
+          </div>
+          <div class="form-control">
+            <%= ff.label :password, 'Password', class: 'label' %>
+            <%= ff.password_field :password, class: 'base-input', required: value['password'].present?, placeholder: value['password'].present? ? '*************' : '' %>
+          </div>
+        </div>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="form-control">
+            <%= ff.label :domain, "Domain (#{t('optional')})", class: 'label' %>
+            <%= ff.text_field :domain, value: value['domain'], class: 'base-input' %>
+          </div>
+          <div class="form-control">
+            <%= ff.label :authentication, 'Authentication', class: 'label' %>
+            <%= ff.select :authentication, options_for_select([%w[Plain plain], %w[Login login], %w[CRAM-MD5 cram_md5]], value.fetch('authentication', 'plain')), { prompt: true }, required: true, class: 'base-select' %>
+          </div>
+        </div>
+        <% if !Docuseal.multitenant? || can?(:manage, :personalization_advanced) %>
+          <div class="form-control">
+            <%= ff.label :security_label, 'SMTP Security', class: 'label' %>
+            <div class="flex flex-wrap items-center gap-x-6">
+              <% [%w[STARTTLS none], %w[TLS tls], %w[SSL ssl], %w[Noverify noverify]].each do |(label, val)| %>
+                <%= ff.label :security, value: val, for: "#{val}_radio", class: 'label' do %>
+                  <%= ff.radio_button :security, val, checked: (value['security'].blank? && val == 'none') || value['security'] == val, id: "#{val}_radio", class: 'base-radio mr-2' %>
+                  <%= label %>
+                <% end %>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+        <div class="form-control">
+          <%= ff.label :from_email, t('send_from_email'), class: 'label' %>
+          <%= ff.email_field :from_email, value: value['from_email'], required: !Docuseal.multitenant?, class: 'base-input' %>
+        </div>
+      <% end %>
+      <div class="form-control pt-2">
+        <%= f.button button_title(title: t('save'), disabled_with: t('saving')), class: 'base-button' %>
+      </div>
+    <% end %>
+    <% if Docuseal.multitenant? && @encrypted_config.persisted? %>
+      <div class="flex justify-center pt-2">
+        <%= button_to t('reset_default'), settings_email_path(@encrypted_config), method: :delete, class: 'link', data: { turbo_confirm: t('are_you_sure_') } %>
+      </div>
+    <% end %>
+  </div>
+  <div class="w-0 lg:w-52"></div>
+</div>

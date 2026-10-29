@@ -1,0 +1,321 @@
+# frozen_string_literal: true
+
+module Submitters
+  module NormalizeValues
+    CHECKSUM_CACHE_STORE = ActiveSupport::Cache::MemoryStore.new
+
+    BASE64_PREFIX_REGEXP = %r{\Adata:image/\w+;base64,}
+
+    BaseError = Class.new(StandardError)
+
+    UnknownFieldName = Class.new(BaseError)
+    InvalidDefaultValue = Class.new(BaseError)
+    UnknownSubmitterName = Class.new(BaseError)
+
+    TRUE_VALUES = ['1', 'true', true, 'TRUE', 'True', 'yes', 'YES', 'Yes'].freeze
+    FALSE_VALUES = ['0', 'false', false, 'FALSE', 'False', 'no', 'NO', 'No'].freeze
+
+    NON_PREFILLABLE_FIELD_TYPES = %w[payment kba verification].freeze
+
+    module_function
+
+    # rubocop:disable Metrics
+    def call(template, values, submitter_name: nil, role_names: nil, for_submitter: nil, throw_errors: false,
+             add_fields: false, purpose: nil)
+      fields =
+        if role_names.present?
+          fetch_roles_fields(template, roles: role_names)
+        else
+          fetch_fields(template, submitter_name:, for_submitter:)
+        end
+
+      fields_uuid_index = fields.index_by { |e| e['uuid'] }
+      fields_name_index = build_fields_index(fields)
+
+      attachments = []
+      new_fields = []
+      recipient_form_fields = nil
+
+      normalized_values = values.to_h.each_with_object({}) do |(key, value), acc|
+        next if key.blank?
+
+        uuid_field = fields_uuid_index[key]
+
+        value_fields = [uuid_field] if uuid_field
+
+        if value_fields.blank?
+          value_fields = fields_name_index[key].presence || fields_name_index[key.to_s.downcase]
+
+          if value_fields.blank?
+            if add_fields && (recipient_form_fields ||= Accounts.load_recipient_form_fields(template.account))
+              new_field = recipient_form_fields.to_a.find { |e| e['name'] == key }.deep_dup
+
+              if new_field && fields.present?
+                new_field = new_field.except('conditions')
+                                     .merge('uuid' => SecureRandom.uuid,
+                                            'readonly' => true,
+                                            'submitter_uuid' => fields.first['submitter_uuid'])
+
+                new_fields.push(new_field)
+                value_fields = [new_field]
+              end
+            elsif throw_errors
+              raise(UnknownFieldName, "Unknown field: #{key}")
+            end
+          end
+        end
+
+        next if value_fields.blank?
+
+        value_fields.each do |field|
+          next if NON_PREFILLABLE_FIELD_TYPES.include?(field['type'])
+
+          if field['type'].in?(%w[initials signature image file stamp]) && value.present?
+            new_value, new_attachments =
+              normalize_attachment_value(value, field, template.account, attachments, for_submitter:, purpose:)
+
+            attachments.push(*new_attachments)
+
+            acc[field['uuid']] = normalize_value(field, new_value)
+          else
+            acc[field['uuid']] = normalize_value(field, value)
+          end
+        end
+      end
+
+      [normalized_values, attachments, new_fields]
+    end
+    # rubocop:enable Metrics
+
+    def normalize_value(field, value)
+      if field['type'] == 'checkbox'
+        return true if TRUE_VALUES.include?(value)
+        return false if FALSE_VALUES.include?(value)
+      end
+
+      return nil if value.blank?
+
+      if field['type'] == 'text'
+        value.to_s
+      elsif field['type'] == 'number'
+        (value.to_f % 1).zero? ? value.to_i : value.to_f
+      elsif field['type'] == 'date' && value != '{{date}}'
+        normalize_date(field, value)
+      else
+        value
+      end
+    end
+
+    def normalize_date(field, value)
+      format = field.dig('preferences', 'format')
+
+      if TimeUtils.format_with_time?(format)
+        normalize_date_time(value, format)
+      elsif TimeUtils.month_only_format?(format)
+        normalize_date_month(value, format)
+      elsif value.is_a?(Integer)
+        Time.zone.at(value.to_s.first(10).to_i).to_date.to_s
+      elsif value.gsub(/\w/, '0') == format.to_s.gsub(/\w/, '0')
+        TimeUtils.parse_date_string(value, format).to_s
+      else
+        Date.parse(value).to_s
+      end
+    rescue ArgumentError
+      value
+    end
+
+    def normalize_date_time(value, format)
+      if value.is_a?(Integer)
+        Time.zone.at(value.to_s.first(10).to_i).utc.iso8601
+      elsif value.to_s.match?(/T\d{2}:\d{2}/)
+        Time.iso8601(value).utc.iso8601
+      else
+        TimeUtils.parse_date_string(value, format).utc.iso8601
+      end
+    end
+
+    def normalize_date_month(value, format)
+      if value.is_a?(Integer)
+        Time.zone.at(value.to_s.first(10).to_i).strftime('%Y-%m')
+      elsif value.to_s.match?(/\A\d{4}-\d{2}\z/)
+        value
+      else
+        TimeUtils.parse_date_string(value, format).strftime('%Y-%m')
+      end
+    end
+
+    def fetch_fields(template, submitter_name: nil, for_submitter: nil)
+      if submitter_name && !for_submitter
+        submitter =
+          template.submitters.find { |e| e['name'] == submitter_name } ||
+          raise(UnknownSubmitterName,
+                "Unknown submitter role: #{submitter_name}. Template defines #{template.submitters.pluck('name')}")
+      end
+
+      fields = for_submitter&.submission&.template_fields || template.fields
+
+      fields.select do |e|
+        submitter_uuid =
+          for_submitter&.uuid || submitter&.dig('uuid') ||
+          raise(UnknownSubmitterName, "Unknown submitter role: template defines #{template.submitters.pluck('name')}")
+
+        e['submitter_uuid'] == submitter_uuid
+      end
+    end
+
+    def fetch_roles_fields(template, roles:)
+      submitters = roles.map do |submitter_name|
+        template.submitters.find { |e| e['name'] == submitter_name } ||
+          raise(UnknownSubmitterName,
+                "Unknown submitter role: #{submitter_name}. Template defines #{template.submitters.pluck('name')}")
+      end
+
+      role_uuids = submitters.pluck('uuid')
+
+      template.fields.select do |e|
+        role_uuids.include?(e['submitter_uuid'])
+      end
+    end
+
+    def build_fields_index(fields)
+      fields.group_by { |e| e['name'] }
+            .merge(fields.group_by { |e| e['name'].to_s.parameterize.underscore })
+            .merge(fields.group_by { |e| e['name'].to_s.downcase })
+    end
+
+    def normalize_attachment_value(value, field, account, attachments, for_submitter: nil, purpose: nil)
+      if value.is_a?(Array)
+        new_attachments = value.map do |v|
+          new_attachment = find_or_build_attachment(v, field, account, for_submitter:, purpose:)
+
+          attachments.find { |a| a.blob_id == new_attachment.blob_id } || new_attachment
+        end
+
+        [new_attachments.map(&:uuid), new_attachments]
+      else
+        new_attachment = find_or_build_attachment(value, field, account, for_submitter:, purpose:)
+
+        existing_attachment = attachments.find { |a| a.blob_id == new_attachment.blob_id }
+
+        attachment = existing_attachment || new_attachment
+
+        [attachment.uuid, attachment]
+      end
+    end
+
+    def find_or_build_attachment(value, field, account, for_submitter: nil, purpose: nil)
+      type = field['type']
+
+      raise InvalidDefaultValue, "Invalid #{type} value" if purpose == :bulk
+
+      blob =
+        if value.match?(%r{\Ahttps?://})
+          raise InvalidDefaultValue, "Invalid #{type} value" unless purpose == :api
+
+          find_or_create_blob_from_url(account, value)
+        elsif type.in?(%w[signature initials]) && value.length < 60
+          find_or_create_blob_from_text(account, value, type)
+        elsif (data = Base64.decode64(value.sub(BASE64_PREFIX_REGEXP, ''))) &&
+              (mime_type = Marcel::MimeType.for(data)).exclude?('octet-stream')
+          find_or_create_blob_from_base64(account, data, type, mime_type:)
+        elsif type == 'image' && (value.starts_with?('<html>') || value.starts_with?('<!DOCTYPE'))
+          raise InvalidDefaultValue, "Invalid #{type} value" unless purpose == :api
+
+          find_or_create_blob_from_html(account, value, field)
+        else
+          raise InvalidDefaultValue, "Invalid value, url, base64 or text < 60 chars is expected: #{value.first(200)}..."
+        end
+
+      attachment = for_submitter.attachments.find_by(blob_id: blob.id) if for_submitter
+
+      attachment ||= ActiveStorage::Attachment.new(
+        blob:,
+        name: 'attachments'
+      )
+
+      attachment
+    end
+
+    def find_or_create_blob_from_html(_account, value, _field)
+      raise InvalidDefaultValue, "HTML content is not allowed: #{value.first(200)}..."
+    end
+
+    def find_or_create_blob_from_base64(account, data, type, mime_type: nil)
+      checksum = Digest::MD5.base64digest(data)
+
+      blob = find_blob_by_checksum(checksum, account)
+
+      return blob if blob
+
+      mime_type ||= Marcel::MimeType.for(data)
+
+      detected_extensions = Marcel::TYPE_EXTS[mime_type].to_a.map(&:downcase)
+
+      if detected_extensions.any? { |e| FilenameUtils::DANGEROUS_EXTENSIONS.include?(e) }
+        raise InvalidDefaultValue, "File type '.#{detected_extensions.first}' is not allowed."
+      end
+
+      extension = detected_extensions.first
+      extension = 'png' if extension.blank? && type.in?(%w[signature initials stamp image])
+
+      filename = extension.present? ? "#{type}.#{extension}" : type
+
+      ActiveStorage::Blob.create_and_upload!(io: StringIO.new(data), filename:)
+    end
+
+    def find_or_create_blob_from_text(account, text, type)
+      data, width, height = Submitters::GenerateFontImage.call(text, font: type)
+
+      checksum = Digest::MD5.base64digest(data)
+
+      blob = find_blob_by_checksum(checksum, account)
+
+      blob || ActiveStorage::Blob.create_and_upload!(
+        io: StringIO.new(data),
+        filename: "#{type}.png",
+        content_type: 'image/png',
+        metadata: { analyzed: true, identified: true, width:, height: }
+      )
+    end
+
+    def find_or_create_blob_from_url(account, url)
+      filename = Addressable::URI.parse(url).path.split('/').last.to_s
+      extension = FilenameUtils.dangerous_extension(filename)
+
+      raise InvalidDefaultValue, "File type '.#{extension}' is not allowed." if extension
+
+      cache_key = [account.id, url].join(':')
+      checksum = CHECKSUM_CACHE_STORE.fetch(cache_key)
+
+      blob = find_blob_by_checksum(checksum, account) if checksum
+
+      return blob if blob
+
+      data = DownloadUtils.call(url, validate: true).body
+
+      checksum = Digest::MD5.base64digest(data)
+
+      CHECKSUM_CACHE_STORE.write(cache_key, checksum)
+
+      blob = find_blob_by_checksum(checksum, account)
+
+      blob || ActiveStorage::Blob.create_and_upload!(io: StringIO.new(data), filename:)
+    end
+
+    def find_blob_by_checksum(checksum, account)
+      blob = ActiveStorage::Blob.find_by(checksum:)
+
+      return unless blob
+
+      attachment = blob.attachments.take
+
+      return if attachment.nil? ||
+                attachment.record_type != 'Submitter' ||
+                attachment.name != 'attachments'
+
+      return blob if attachment.record&.account_id == account.id
+
+      nil
+    end
+  end
+end

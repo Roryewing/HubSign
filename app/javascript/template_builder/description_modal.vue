@@ -1,0 +1,126 @@
+<template>
+  <div
+    :class="{ 'modal modal-open items-start !animate-none overflow-y-auto': !inline }"
+  >
+    <div
+      v-if="!inline"
+      class="absolute top-0 bottom-0 right-0 left-0"
+      @click.prevent="$emit('close')"
+    />
+    <div :class="inline ? 'px-4 pt-3 pb-6' : 'modal-box pt-4 pb-6 px-6 mt-20 max-h-none w-full max-w-xl'">
+      <div
+        v-if="!inline"
+        class="flex justify-between items-center border-b pb-2 mb-2 font-medium"
+      >
+        <span class="modal-title">
+          {{ (defaultField ? (defaultField.title || field.title || field.name) : field.name) || buildDefaultName(field) }}
+        </span>
+        <a
+          href="#"
+          class="text-xl modal-close-button"
+          @click.prevent="$emit('close')"
+        >&times;</a>
+      </div>
+      <div>
+        <form @submit.prevent="saveAndClose">
+          <div class="space-y-1 mb-1">
+            <div>
+              <label
+                dir="auto"
+                class="label text-sm"
+                for="description_field"
+              >
+                {{ t('description') }}
+              </label>
+              <textarea
+                id="description_field"
+                ref="textarea"
+                v-model="description"
+                dir="auto"
+                class="base-textarea !text-base w-full"
+                :readonly="!editable"
+                @input="resizeTextarea"
+              />
+            </div>
+            <div>
+              <label
+                dir="auto"
+                class="label text-sm"
+                for="title_field"
+              >
+                {{ t('display_title') }} ({{ t('optional') }})
+              </label>
+              <input
+                id="title_field"
+                v-model="title"
+                dir="auto"
+                :readonly="!editable"
+                class="base-input !text-base w-full"
+              >
+            </div>
+          </div>
+          <button class="base-button w-full mt-4 modal-save-button">
+            {{ t('save') }}
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+export default {
+  name: 'DescriptionModal',
+  inject: ['t', 'template'],
+  props: {
+    field: {
+      type: Object,
+      required: true
+    },
+    defaultField: {
+      type: Object,
+      required: false,
+      default: null
+    },
+    editable: {
+      type: Boolean,
+      required: false,
+      default: true
+    },
+    buildDefaultName: {
+      type: Function,
+      required: true
+    },
+    inline: {
+      type: Boolean,
+      required: false,
+      default: false
+    }
+  },
+  emits: ['close', 'save'],
+  data () {
+    return {
+      description: this.field.description,
+      title: this.field.title
+    }
+  },
+  mounted () {
+    this.resizeTextarea()
+  },
+  methods: {
+    saveAndClose () {
+      this.field.description = this.description
+      this.field.title = this.title
+
+      this.$emit('save')
+      this.$emit('close')
+    },
+    resizeTextarea () {
+      const textarea = this.$refs.textarea
+
+      textarea.style.height = 'auto'
+      textarea.style.height = textarea.scrollHeight + 'px'
+    }
+  }
+}
+</script>

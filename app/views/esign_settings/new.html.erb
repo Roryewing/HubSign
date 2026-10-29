@@ -1,0 +1,26 @@
+<%= render 'shared/turbo_modal', title: t('upload_certificate') do %>
+  <%= form_for @cert_record, url: settings_esign_path, html: { class: 'space-y-4', enctype: 'multipart/form-data' }, data: { turbo_frame: :_top } do |f| %>
+    <div class="space-y-2">
+      <div class="form-control">
+        <%= f.label :name, t('name'), class: 'label' %>
+        <%= f.text_field :name, required: true, class: 'base-input' %>
+      </div>
+      <div class="form-control">
+        <%= f.label :file, t('file'), class: 'label' %>
+        <%= f.file_field :file, class: 'file-input file-input-bordered w-full', required: true %>
+        <label class="label">
+          <span class="label-text-alt">
+            <%= t('use_a_valid_der_p12_or_pfx_file') %>
+          </span>
+        </label>
+      </div>
+      <div class="form-control">
+        <%= f.label :password, "#{t('password')} (#{t('optional')})", class: 'label' %>
+        <%= f.password_field :password, class: 'base-input' %>
+      </div>
+    </div>
+    <div class="form-control pt-2">
+      <%= f.button button_title, class: 'base-button' %>
+    </div>
+  <% end %>
+<% end %>

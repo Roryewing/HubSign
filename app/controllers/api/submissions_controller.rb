@@ -1,0 +1,283 @@
+# frozen_string_literal: true
+
+module Api
+  class SubmissionsController < ApiBaseController
+    SUBMISSION_COLUMNS = %i[id name slug source submitters_order expire_at completed_at created_at updated_at
+                            archived_at variables template_id template_submitters created_by_user_id].freeze
+    TEMPLATE_COLUMNS = %i[id name external_id created_at updated_at folder_id submitters].freeze
+
+    load_and_authorize_resource :template, only: :create
+    load_and_authorize_resource :submission, only: %i[show index update destroy]
+
+    before_action only: :create do
+      authorize!(:create, Submission)
+    end
+
+    before_action :maybe_return_template_error, only: :create
+
+    def index
+      submissions = Submissions.search(current_user, @submissions, params[:q])
+      submissions = filter_submissions(submissions, params)
+
+      with_fields = params[:include].to_s.include?('fields') || params[:include].to_s.include?('combined_document_url')
+
+      submissions = paginate(
+        submissions.select(with_fields ? nil : SUBMISSION_COLUMNS)
+                   .preload(:created_by_user, :submitters, combined_document_attachment: :blob,
+                                                           audit_trail_attachment: :blob)
+      )
+
+      ActiveRecord::Associations::Preloader.new(
+        records: submissions,
+        associations: :template,
+        scope: with_fields ? nil : Template.select(TEMPLATE_COLUMNS)
+      ).call
+
+      ActiveRecord::Associations::Preloader.new(records: submissions.filter_map(&:template),
+                                                associations: { folder: :parent_folder }).call
+
+      expires_at = Accounts.link_expires_at(current_account)
+
+      render json: {
+        data: submissions.map do |s|
+          Submissions::SerializeForApi.call(s, s.submitters, params,
+                                            with_events: false, with_documents: false, with_values: false, expires_at:)
+        end,
+        pagination: {
+          count: submissions.size,
+          next: submissions.last&.id,
+          prev: submissions.first&.id
+        }
+      }
+    end
+
+    def show
+      submitters = @submission.submitters.preload(documents_attachments: :blob, attachments_attachments: :blob)
+
+      submitters.each do |submitter|
+        if submitter.completed_at? && submitter.documents_attachments.blank?
+          submitter.documents_attachments = Submissions::EnsureResultGenerated.call(submitter)
+        end
+      end
+
+      if @submission.audit_trail_attachment.blank? && @submission.completed_at?
+        @submission.audit_trail_attachment = Submissions::EnsureAuditGenerated.call(@submission)
+      end
+
+      render json: Submissions::SerializeForApi.call(@submission, submitters, params)
+    end
+
+    def create
+      Params::SubmissionCreateValidator.call(params)
+
+      params[:send_email] = true unless params.key?(:send_email)
+      params[:send_sms] = false unless params.key?(:send_sms)
+
+      submissions = create_submissions(@template, params)
+
+      WebhookUrls.enqueue_events(submissions, 'submission.created')
+
+      Submissions.send_signature_requests(submissions)
+
+      submissions.each do |submission|
+        if submission.submitters.all? { |s| s.viewer? || s.completed_at? } &&
+           Submissions.maybe_update_completed_at(submission)
+          last_submitter = submission.submitters.reject(&:viewer?).max_by(&:completed_at)
+        end
+
+        submission.submitters.each do |submitter|
+          next unless submitter.completed_at?
+
+          ProcessSubmitterCompletionJob.perform_async('submitter_id' => submitter.id,
+                                                      'is_last' => submitter == last_submitter,
+                                                      'send_invitation_email' => false)
+        end
+      end
+
+      SearchEntries.enqueue_reindex(submissions)
+
+      render json: build_create_json(submissions)
+    rescue Submitters::NormalizeValues::BaseError, Submissions::CreateFromSubmitters::BaseError,
+           Submitters::SubmitValues::ValidationError, DownloadUtils::UnableToDownload => e
+      Rollbar.warning(e) if defined?(Rollbar)
+
+      render json: { error: e.message }, status: :unprocessable_content
+    end
+
+    def update
+      @submission = assign_submission_attrs(@submission, submission_params)
+
+      @submission.save!
+
+      if @submission.saved_change_to_archived_at? && @submission.archived_at?
+        WebhookUrls.enqueue_events(@submission, 'submission.archived')
+      end
+
+      if @submission.saved_change_to_expire_at? && @submission.expire_at?
+        ProcessSubmissionExpiredJob.perform_at(@submission.expire_at, 'submission_id' => @submission.id,
+                                                                      'expire_at' => @submission.expire_at.to_i)
+      end
+
+      SearchEntries.enqueue_reindex(@submission) if @submission.saved_change_to_name?
+
+      render json: Submissions::SerializeForApi.call(@submission, nil, params, with_events: false)
+    end
+
+    def destroy
+      if params[:permanently].in?(['true', true])
+        @submission.destroy!
+      else
+        @submission.update!(archived_at: Time.current)
+
+        WebhookUrls.enqueue_events(@submission, 'submission.archived')
+      end
+
+      render json: @submission.as_json(only: %i[id archived_at])
+    end
+
+    private
+
+    def assign_submission_attrs(submission, attrs)
+      archived = attrs.key?(:archived) ? attrs[:archived] : attrs[:archived_at]
+
+      if archived.in?([true, false, 'true', 'false']) && current_ability.can?(:destroy, submission)
+        submission.archived_at = archived.in?(Submitters::TRUE_VALUES) ? Time.current : nil
+      end
+
+      submission.name = attrs[:name] if attrs.key?(:name)
+      submission.expire_at = attrs[:expire_at].presence if attrs.key?(:expire_at)
+
+      submission
+    end
+
+    def submission_params
+      submission_params = params.key?(:submission) ? params.require(:submission) : params
+
+      submission_params.permit(:name, :expire_at, :archived, :archived_at)
+    end
+
+    def maybe_return_template_error
+      return render json: { error: 'Template not found' }, status: :unprocessable_content if @template.nil?
+
+      if @template.archived_at?
+        Rollbar.warning("Archived template submission: #{@template.id}") if defined?(Rollbar)
+
+        return render json: { error: 'Template has been archived' }, status: :unprocessable_content
+      end
+
+      return if @template.fields.present?
+
+      Rollbar.warning("Template does not contain fields: #{@template.id}") if defined?(Rollbar)
+
+      render json: { error: 'Template does not contain fields' }, status: :unprocessable_content
+    end
+
+    def filter_submissions(submissions, params)
+      submissions = submissions.where(slug: params[:slug]) if params[:slug].present?
+
+      if params[:template_folder].present?
+        folders =
+          TemplateFolders.filter_by_full_name(TemplateFolder.accessible_by(current_ability), params[:template_folder])
+
+        submissions = submissions.joins(:template).where(template: { folder_id: folders.pluck(:id) })
+      end
+
+      if params.key?(:archived)
+        submissions = params[:archived].in?(['true', true]) ? submissions.archived : submissions.active
+      end
+
+      Submissions::Filter.call(submissions, current_user, params)
+    end
+
+    def build_create_json(submissions)
+      json = submissions.flat_map do |submission|
+        submission.submitters.map do |s|
+          Submitters::SerializeForApi.call(s, with_documents: false, with_urls: true, params:)
+        end
+      end
+
+      if request.path.ends_with?('/init')
+        json =
+          if submissions.size == 1
+            {
+              id: submissions.first.id,
+              submitters: json,
+              expire_at: submissions.first.expire_at,
+              created_at: submissions.first.created_at
+            }
+          else
+            { submitters: json }
+          end
+      end
+
+      json
+    end
+
+    def create_submissions(template, params)
+      is_send_email = !params[:send_email].in?(['false', false])
+
+      if (emails = (params[:emails] || params[:email]).presence) &&
+         params[:submission].blank? && params[:submitters].blank?
+        Submissions.create_from_emails(template:,
+                                       user: current_user,
+                                       source: :api,
+                                       mark_as_sent: is_send_email,
+                                       emails:,
+                                       params:)
+      else
+        submissions_attrs, attachments =
+          Submissions::NormalizeParamUtils.normalize_submissions_params!(submissions_params, template, purpose: :api)
+
+        submissions = Submissions.create_from_submitters(
+          template:,
+          user: current_user,
+          source: :api,
+          submitters_order: params[:submitters_order] || params[:order] || 'preserved',
+          submissions_attrs:,
+          params:
+        )
+
+        submitters = submissions.flat_map(&:submitters)
+
+        Submissions::NormalizeParamUtils.save_default_value_attachments!(attachments, submitters)
+
+        submitters.each do |submitter|
+          if submitter.completed_at?
+            Submitters::SubmitValues.maybe_invite_via_field(submitter, request)
+            SubmissionEvents.create_with_tracking_data(submitter, 'api_complete_form', request)
+          end
+        end
+
+        submissions
+      end
+    end
+
+    def submissions_params
+      permitted_attrs = [
+        :send_email, :send_sms, :bcc_completed, :completed_redirect_url, :reply_to, :go_to_last,
+        :require_phone_2fa, :require_email_2fa, :expire_at, :name,
+        {
+          variables: {},
+          message: %i[subject body],
+          submitters: [[:send_email, :send_sms, :completed_redirect_url, :uuid, :name, :email, :role,
+                        :completed, :phone, :application_key, :external_id, :reply_to, :go_to_last,
+                        :require_phone_2fa, :require_email_2fa, :order, :index, :invite_by,
+                        { metadata: {}, values: {}, roles: [], readonly_fields: [], message: %i[subject body],
+                          fields: [:name, :uuid, :default_value, :value, :title, :description,
+                                   :readonly, :required, :validation_pattern, :invalid_message,
+                                   { default_value: [], value: [], preferences: {}, validation: {} }] }]]
+        }
+      ]
+
+      if params.key?(:submitters)
+        params.permit(*permitted_attrs)
+      else
+        key = params.key?(:submission) ? :submission : :submissions
+
+        params.permit(
+          { key => [permitted_attrs] }, { key => permitted_attrs }
+        ).fetch(key, [])
+      end
+    end
+  end
+end

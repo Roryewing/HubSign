@@ -1,0 +1,167 @@
+# frozen_string_literal: true
+
+module Submissions
+  module GeneratePreviewAttachments
+    module_function
+
+    # rubocop:disable Metrics
+    def call(submission, values_hash: nil, submitter: nil, merge: false)
+      values_hash ||= if submitter
+                        build_submitter_values_hash(submitter)
+                      else
+                        build_values_hash(submission)
+                      end
+
+      configs = submission.account.account_configs.where(key: [AccountConfig::FLATTEN_RESULT_PDF_KEY,
+                                                               AccountConfig::WITH_SIGNATURE_ID,
+                                                               AccountConfig::WITH_SUBMITTER_TIMEZONE_KEY,
+                                                               AccountConfig::WITH_TIMESTAMP_SECONDS_KEY,
+                                                               AccountConfig::ROTATE_INCREMENTAL_PDF_KEY,
+                                                               AccountConfig::WITH_FILE_LINKS_KEY,
+                                                               AccountConfig::WITH_SIGNATURE_ID_REASON_KEY,
+                                                               AccountConfig::WITH_SIGNATURE_ID_COMPLETED_AT_KEY])
+
+      with_signature_id = configs.find { |c| c.key == AccountConfig::WITH_SIGNATURE_ID }&.value == true
+      with_file_links = configs.find { |c| c.key == AccountConfig::WITH_FILE_LINKS_KEY }&.value == true
+      is_flatten = configs.find { |c| c.key == AccountConfig::FLATTEN_RESULT_PDF_KEY }&.value != false
+      is_rotate_incremental = configs.find { |c| c.key == AccountConfig::ROTATE_INCREMENTAL_PDF_KEY }&.value == true
+      with_submitter_timezone = configs.find { |c| c.key == AccountConfig::WITH_SUBMITTER_TIMEZONE_KEY }&.value == true
+      with_timestamp_seconds = configs.find { |c| c.key == AccountConfig::WITH_TIMESTAMP_SECONDS_KEY }&.value == true
+      with_signature_id_reason =
+        configs.find { |c| c.key == AccountConfig::WITH_SIGNATURE_ID_REASON_KEY }&.value != false
+      with_signature_id_completed_at =
+        configs.find { |c| c.key == AccountConfig::WITH_SIGNATURE_ID_COMPLETED_AT_KEY }&.value == true
+
+      file_links_expire_at = Accounts.link_expires_at(submission.account) if with_file_links
+
+      pdfs_index = GenerateResultAttachments.build_pdfs_index(submission, flatten: is_flatten,
+                                                                          incremental: is_rotate_incremental)
+
+      submitters = if submitter
+                     submission.submitters.where(id: submitter.id)
+                   else
+                     submission.submitters.where(completed_at: nil)
+                   end
+
+      submitters.preload(attachments_attachments: :blob).each_with_index do |s, index|
+        GenerateResultAttachments.fill_submitter_fields(s, submission.account, pdfs_index,
+                                                        with_signature_id:, is_flatten:, with_headings: index.zero?,
+                                                        with_submitter_timezone:, with_file_links:,
+                                                        file_links_expire_at:, with_signature_id_reason:,
+                                                        with_timestamp_seconds:, with_signature_id_completed_at:)
+      end
+
+      template = submission.template
+
+      if merge
+        result = HexaPDF::Document.new
+
+        (submission.template_schema || template.schema).each do |item|
+          pdf = pdfs_index[item['attachment_uuid']]
+
+          next unless pdf
+
+          pdf.dispatch_message(:complete_objects)
+
+          pdf.pages.each { |page| result.pages << result.import(page) }
+        end
+
+        attachment = build_pdf_attachment(
+          pdf: result,
+          submission:,
+          values_hash:,
+          name: 'preview_merged_document',
+          filename: "#{submission.name || template&.name}.pdf".tr('/', '-')
+        )
+
+        ApplicationRecord.no_touching { attachment.save! }
+
+        [attachment]
+      else
+        image_pdfs = []
+        original_documents = submission.schema_documents.preload(:blob)
+
+        result_attachments =
+          (submission.template_schema || template.schema).filter_map do |item|
+            pdf = pdfs_index[item['attachment_uuid']]
+
+            next if pdf.nil?
+
+            if original_documents.find { |a| a.uuid == item['attachment_uuid'] }.image?
+              pdf = GenerateResultAttachments.normalize_image_pdf(pdf)
+
+              image_pdfs << pdf
+            end
+
+            build_pdf_attachment(pdf:, submission:, submitter:,
+                                 uuid: item['attachment_uuid'],
+                                 values_hash:,
+                                 filename: "#{item['name']}.pdf")
+          end
+
+        return ApplicationRecord.no_touching { result_attachments.map { |e| e.tap(&:save!) } } if image_pdfs.size < 2
+
+        images_pdf =
+          image_pdfs.each_with_object(HexaPDF::Document.new) do |pdf, doc|
+            pdf.pages.each { |page| doc.pages << doc.import(page) }
+          end
+
+        images_pdf = GenerateResultAttachments.normalize_image_pdf(images_pdf)
+
+        images_pdf_attachment =
+          build_pdf_attachment(
+            pdf: images_pdf,
+            submission:,
+            submitter:,
+            uuid: GenerateResultAttachments.images_pdf_uuid(original_documents.select(&:image?)),
+            values_hash:,
+            filename: "#{submission.name || template&.name}.pdf".tr('/', '-')
+          )
+
+        ApplicationRecord.no_touching do
+          (result_attachments + [images_pdf_attachment]).map { |e| e.tap(&:save!) }
+        end
+      end
+    end
+
+    def build_values_hash(submission)
+      Digest::MD5.hexdigest(
+        submission.submitters.reduce({}) { |acc, s| acc.merge(s.values) }.to_json
+      )
+    end
+
+    def build_submitter_values_hash(submitter)
+      submission = submitter.submission
+
+      Digest::MD5.hexdigest(
+        submission.submitters.where.not(completed_at: nil).or(submission.submitters.where(id: submitter.id))
+                  .reduce({}) { |acc, s| acc.merge(s.values) }.to_json
+      )
+    end
+
+    def build_pdf_attachment(pdf:, submission:, filename:, values_hash:, submitter: nil, uuid: nil,
+                             name: 'preview_documents')
+      io = StringIO.new
+
+      begin
+        pdf.write(io, incremental: true, validate: false)
+      rescue HexaPDF::MalformedPDFError => e
+        Rollbar.error(e) if defined?(Rollbar)
+
+        pdf.write(io, incremental: false, validate: false)
+      end
+
+      ActiveStorage::Attachment.new(
+        blob: ActiveStorage::Blob.create_and_upload!(io: io.tap(&:rewind), filename:),
+        io_data: io.string,
+        metadata: { original_uuid: uuid,
+                    values_hash:,
+                    analyzed: true,
+                    sha256: Base64.urlsafe_encode64(Digest::SHA256.digest(io.string)) }.compact,
+        name: name,
+        record: submitter || submission
+      )
+    end
+    # rubocop:enable Metrics
+  end
+end

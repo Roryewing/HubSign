@@ -1,0 +1,36 @@
+<% content_for(:native_title, t('notifications')) if turbo_native_app? %>
+<div class="flex flex-wrap space-y-4 md:flex-nowrap md:space-y-0">
+  <%= render 'shared/settings_nav' %>
+  <div class="flex-grow max-w-xl mx-auto">
+    <h1 class="text-3xl md:text-4xl font-bold mb-4">
+      <%= t('email_notifications') %>
+    </h1>
+    <div class="mt-2 mb-1">
+      <% user_config = UserConfig.find_or_initialize_by(user: current_user, key: UserConfig::RECEIVE_COMPLETED_EMAIL) %>
+      <% if can?(:manage, user_config) %>
+        <%= form_for user_config, url: user_configs_path, method: :post do |f| %>
+          <%= f.hidden_field :key %>
+          <div class="flex items-center justify-between">
+            <span>
+              <%= t('receive_notification_emails_on_completed_submission') %>
+            </span>
+            <submit-form data-on="change" class="flex">
+              <%= f.check_box :value, class: 'toggle', checked: user_config.value != false %>
+            </submit-form>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+    <%= render 'bcc_form', config: @bcc_config %>
+    <% unless can?(:manage, :personalization_restricted) || (turbo_native_ios? && !can?(:manage, :email_reminders)) %>
+      <div class="flex justify-between items-end mb-4 mt-8">
+        <h2 class="text-2xl md:text-3xl font-bold">
+          <%= t('sign_request_email_reminders') %>
+        </h2>
+      </div>
+      <%= render 'reminder_banner' %>
+      <%= render 'reminder_form', config: @reminder_config %>
+    <% end %>
+  </div>
+  <div class="w-0 lg:w-52"></div>
+</div>

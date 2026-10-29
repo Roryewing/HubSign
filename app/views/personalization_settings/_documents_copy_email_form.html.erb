@@ -1,0 +1,64 @@
+<div class="collapse collapse-plus bg-base-200 overflow-visible">
+  <input type="checkbox">
+  <div class="collapse-title text-xl font-medium capitalize">
+    <div>
+      <%= t('documents_copy_email') %>
+    </div>
+  </div>
+  <div class="collapse-content">
+    <%= form_for AccountConfigs.find_or_initialize_for_key(current_account, AccountConfig::SUBMITTER_DOCUMENTS_COPY_EMAIL_KEY), url: settings_personalization_path, method: :post, html: { autocomplete: 'off', class: 'flex flex-col gap-4' } do |f| %>
+      <%= f.hidden_field :key %>
+      <%= f.fields_for :value, Struct.new(:subject, :body, :reply_to, :attach_audit_log, :attach_documents, :bcc_recipients, :enabled).new(*f.object.value.values_at('subject', 'body', 'reply_to', 'attach_audit_log', 'attach_documents', 'bcc_recipients', 'enabled')) do |ff| %>
+        <div class="form-control">
+          <div class="flex items-center">
+            <%= ff.label :subject, t('subject'), class: 'label' %>
+            <span class="tooltip tooltip-right hidden md:flex" data-tip="<%= t('completed_documents_copy_email_sent_to_recipients_upon_completion_containing_their_documents') %>">
+              <%= svg_icon('info_circle', class: 'w-4 h-4') %>
+            </span>
+          </div>
+          <%= ff.text_field :subject, required: true, class: 'base-input', dir: 'auto' %>
+        </div>
+        <%= render 'personalization_settings/email_body_field', ff:, config: f.object %>
+        <% if can?(:manage, :reply_to) || can?(:manage, :personalization_advanced) %>
+          <div class="form-control">
+            <%= ff.label :reply_to, t('reply_to'), class: 'label' %>
+            <%= ff.email_field :reply_to, class: 'base-input', dir: 'auto', placeholder: t(:email) %>
+          </div>
+        <% end %>
+        <div class="space-y-3.5">
+          <div class="flex items-center justify-between mx-1">
+            <span>
+              <%= t('attach_documents') %>
+            </span>
+            <%= ff.check_box :attach_documents, { checked: ff.object.attach_documents != false, class: 'toggle' }, 'true', 'false' %>
+          </div>
+          <div class="flex items-center justify-between mx-1">
+            <span>
+              <%= t('attach_audit_log_pdf') %>
+            </span>
+            <%= ff.check_box :attach_audit_log, { checked: ff.object.attach_audit_log != false, class: 'toggle' }, 'true', 'false' %>
+          </div>
+          <% unless Docuseal.multitenant? %>
+            <div class="flex items-center justify-between mx-1">
+              <span>
+                <%= t('bcc_recipients') %>
+              </span>
+              <%= ff.check_box :bcc_recipients, { checked: ff.object.bcc_recipients == true, class: 'toggle' }, 'true', 'false' %>
+            </div>
+          <% end %>
+          <% if !Docuseal.multitenant? || can?(:manage, :personalization_advanced) %>
+            <div class="flex items-center justify-between mx-1">
+              <span>
+                <%= t('send_emails_automatically_on_completion') %>
+              </span>
+              <%= ff.check_box :enabled, { checked: ff.object.enabled != false, class: 'toggle' }, 'true', 'false' %>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+      <div class="form-control pt-2">
+        <%= f.button button_title(title: t('save'), disabled_with: t('saving')), class: 'base-button' %>
+      </div>
+    <% end %>
+  </div>
+</div>
