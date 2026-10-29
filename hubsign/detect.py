@@ -185,11 +185,14 @@ def label_fields(pdf: bytes) -> list[dict]:
         # thin horizontal strokes are underlines: (x0, x1, y), y from the bottom of the page
         rules = [(o.x0, o.x1, (o.y0 + o.y1) / 2) for o in items
                  if isinstance(o, (LTLine, LTRect, LTCurve)) and o.height < 2 and o.width > 30]  # fmt: skip
-        for line in (o for o in items if isinstance(o, LTTextLine)):
-            text = line.get_text().strip()
+        for raw in (o for o in items if isinstance(o, LTTextLine)):
+            # invisible anchor text (white or tiny, like ~cus-sign~) shares the line with the label: ignore it
+            vis = [c for c in raw if isinstance(c, LTChar) and c.size >= MIN_VISIBLE_PT]
+            text = "".join(c.get_text() for c in vis).strip()
             if not text:
                 continue
-            for ch in (c for c in line if isinstance(c, LTChar) and c.get_text() in CHECKBOXES):
+            line = _Span(min(c.x0 for c in vis), max(c.x1 for c in vis), min(c.y0 for c in vis), max(c.y1 for c in vis))
+            for ch in (c for c in raw if isinstance(c, LTChar) and c.get_text() in CHECKBOXES):
                 s = max(ch.width, ch.height, 8)
                 out.append(_field(page, "checkbox", ch.x0, page.height - ch.y0 - s, ch.x0 + s, page.height - ch.y0, n))
             kind = next((k for k, rx in (("signature", SIGNATURE_RE), ("initials", INITIALS_RE), ("date", DATE_RE),
@@ -218,3 +221,12 @@ def label_fields(pdf: bytes) -> list[dict]:
 
 
 _BLANK = "_ -:"
+MIN_VISIBLE_PT = 4
+
+
+class _Span:
+    """Bounding box of a line's visible characters."""
+
+    def __init__(self, x0, x1, y0, y1):
+        self.x0, self.x1, self.y0, self.y1 = x0, x1, y0, y1
+        self.width = x1 - x0
