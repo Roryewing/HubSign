@@ -8,29 +8,40 @@ module Api
     FIELD_TYPES = %w[signature initials text date datenow name checkbox].freeze
 
     def create
-      template = Template.new(account: current_account, author: current_user, source: :api,
-                              name: params[:name].presence || 'Document',
-                              external_id: params[:external_id].presence,
-                              folder: TemplateFolders.find_or_create_by_name(current_user, params[:folder_name]))
+      template = build_template
       authorize!(:create, template)
 
-      template.submitters = Array(params[:roles]).map { |name| { 'name' => name.to_s, 'uuid' => SecureRandom.uuid } }
-      return render json: { error: 'roles is required' }, status: :unprocessable_content if template.submitters.blank?
+      return render_error('roles is required') if template.submitters.blank?
 
       template.save!
       attachments = Array(params[:documents]).map { |d| attach(template, d) }
-      return render json: { error: 'documents is required' }, status: :unprocessable_content if attachments.empty?
+      return render_error('documents is required') if attachments.empty?
 
-      template.schema = attachments.map { |a| { attachment_uuid: a.uuid, name: a.filename.base } }
-      template.fields = Array(params[:fields]).map { |f| build_field(template, attachments, f) }
-      template.save!
+      fill(template, attachments)
 
       render json: Templates::SerializeForApi.call(template)
     rescue ArgumentError => e
-      render json: { error: e.message }, status: :unprocessable_content
+      render_error(e.message)
     end
 
     private
+
+    def build_template
+      Template.new(account: current_account, author: current_user, source: :api,
+                   name: params[:name].presence || 'Document', external_id: params[:external_id].presence,
+                   folder: TemplateFolders.find_or_create_by_name(current_user, params[:folder_name]),
+                   submitters: Array(params[:roles]).map { |name| { 'name' => name.to_s, 'uuid' => SecureRandom.uuid } })
+    end
+
+    def fill(template, attachments)
+      template.schema = attachments.map { |a| { attachment_uuid: a.uuid, name: a.filename.base } }
+      template.fields = Array(params[:fields]).map { |f| build_field(template, attachments, f) }
+      template.save!
+    end
+
+    def render_error(message)
+      render json: { error: message }, status: :unprocessable_content
+    end
 
     def attach(template, doc)
       data = Base64.strict_decode64(doc[:file_base64].to_s.gsub(/\s/, ''))

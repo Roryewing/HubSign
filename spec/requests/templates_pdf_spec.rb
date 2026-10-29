@@ -21,7 +21,8 @@ describe 'Templates PDF API' do
 
   it 'rejects a field for an unknown role' do
     post '/api/templates/pdf',
-         params: { roles: %w[A], documents: [{ file_base64: pdf }], fields: [{ name: 'x', role: 'B', type: 'text' }] }.to_json,
+         params: { roles: %w[A], documents: [{ file_base64: pdf }],
+                   fields: [{ name: 'x', role: 'B', type: 'text' }] }.to_json,
          headers: { 'x-auth-token': author.access_token.token, 'content-type': 'application/json' }
 
     expect(response).to have_http_status(:unprocessable_content)
