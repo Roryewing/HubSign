@@ -38,6 +38,7 @@ of completion. Everything the web app does is available over a documented REST A
 | Prefilled fields | A text or checkbox field with a `value` is filled in and locked; `label` names a field, and `GET /v1/envelopes/{id}/form_data` returns what signers typed, by label |
 | Reassign | `allow_reassign` lets a signer hand their part to someone else; the old link dies, the audit trail records it |
 | Email | SendGrid API (or SMTP), HTML emails, per-envelope `reply_to` and `sender_name` |
+| Field detection | `POST /v1/detect-fields`: imports the PDF's own form fields and places fields beside printed Signature / Date / Initials labels, snapped to underlines (ported from DocuSeal; its ML box detector is not) |
 | Python SDK | `hubsign.sdk.HubSign`: envelopes, templates, bulk send, verify, webhooks, plus `verify_signature()` for receivers |
 
 ## Quick start
@@ -159,4 +160,4 @@ uv run pytest -q
 
 ## License
 
-MIT
+AGPL-3.0. Field detection (`hubsign/detect.py`) is ported from [DocuSeal](https://github.com/docusealco/docuseal) (AGPL-3.0); per `LICENSE_ADDITIONAL_TERMS` the DocuSeal attribution is retained. Earlier releases were MIT.

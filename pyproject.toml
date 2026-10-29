@@ -4,7 +4,7 @@ version = "0.3.0"
 description = "E-signature platform with a developer API, signed webhooks and a sandbox"
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
+license = { text = "AGPL-3.0-or-later" }
 dependencies = [
   "fastapi>=0.115",
   "uvicorn>=0.30",
