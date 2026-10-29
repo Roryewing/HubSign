@@ -1,3 +1,12 @@
+# HubSign
+
+E-signature platform, a fork of [DocuSeal](https://github.com/docusealco/docuseal) (AGPL-3.0; DocuSeal attribution is kept in the UI per `LICENSE_ADDITIONAL_TERMS`).
+
+- Earlier Python implementation: `python-legacy` branch.
+- Pull upstream updates: `git fetch upstream && git merge upstream/master`.
+
+---
+
 <h1 align="center" style="border-bottom: none">
   <div>
     <a href="https://www.docuseal.com">
