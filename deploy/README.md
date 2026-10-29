@@ -20,3 +20,12 @@ Free Supabase projects pause after about a week with no database activity. A dai
 
 Free projects also have no automatic backups: take a `pg_dump` now and then, and keep the Supabase bucket's file limits in
 mind (check the current free-tier storage and per-file limits on supabase.com/pricing).
+
+## Check storage before the first upload
+
+Placeholders left in `.env` (PROJECTREF in `S3_ENDPOINT`, the default `AWS_REGION`) make Supabase answer every request with an
+empty `400 BadRequest`. After `docker compose up -d`, run:
+
+    docker compose exec -T -w /app app /app/bin/bundle exec rails runner 'c=ActiveStorage::Blob.service.client.client; b=ENV["S3_ATTACHMENTS_BUCKET"]; {list: ->{c.list_objects_v2(bucket: b, max_keys: 1)}, put: ->{c.put_object(bucket: b, key: "hs-test.txt", body: "hi")}, head: ->{c.head_object(bucket: b, key: "hs-test.txt")}}.each{|n,f| begin; f.call; puts "#{n} OK"; rescue => e; puts "#{n}: #{e.class}: #{e.message[0,200]}"; end}'
+
+All three lines should say OK. `docker compose up -d --force-recreate app` applies a changed `.env`.
