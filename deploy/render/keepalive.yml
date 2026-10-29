@@ -1,0 +1,9 @@
+# Fallback: Render free web service. Copy to .github/workflows/ to stop it sleeping (set repo variable HUBSIGN_URL).
+name: keepalive
+on:
+  schedule: [{cron: "*/10 * * * *"}]
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --max-time 60 "${{ vars.HUBSIGN_URL }}/up" || curl -fsS --max-time 60 "${{ vars.HUBSIGN_URL }}/"

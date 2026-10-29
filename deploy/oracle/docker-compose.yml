@@ -1,0 +1,16 @@
+# HubSign on an Oracle Cloud always-free VM. Database and files live in Supabase, so the VM holds no state.
+services:
+  app:
+    image: docuseal/docuseal:latest # ponytail: build from this repo instead once HubSign has code changes
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      FORCE_SSL: ${HOST}
+  caddy:
+    image: caddy:latest
+    restart: unless-stopped
+    command: caddy reverse-proxy --from ${HOST} --to app:3000
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes: ["./caddy:/data/caddy"]
+    environment:
+      HOST: ${HOST}

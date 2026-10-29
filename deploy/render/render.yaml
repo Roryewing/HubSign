@@ -1,0 +1,14 @@
+# Fallback: same env as deploy/oracle/.env.example; set the secrets in the Render dashboard.
+services:
+  - type: web
+    name: hubsign
+    runtime: docker
+    plan: free
+    envVars:
+      - {key: SECRET_KEY_BASE, generateValue: true}
+      - {key: DATABASE_URL, sync: false}
+      - {key: S3_ATTACHMENTS_BUCKET, sync: false}
+      - {key: S3_ENDPOINT, sync: false}
+      - {key: AWS_REGION, value: us-east-1}
+      - {key: AWS_ACCESS_KEY_ID, sync: false}
+      - {key: AWS_SECRET_ACCESS_KEY, sync: false}
