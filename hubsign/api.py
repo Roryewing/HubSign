@@ -21,7 +21,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from . import __version__, mail, security
+from . import __version__, detect, mail, pdfs, security
 from .config import Settings
 from .core import DEFAULT_SIZE, Error, Service, now, rid
 from .db import Database
@@ -127,6 +127,10 @@ class FieldIn(BaseModel):
         if self.anchor is None and (self.x is None or self.y is None):
             raise ValueError("give x and y, or an anchor")
         return self
+
+
+class DetectIn(BaseModel):
+    document_base64: str
 
 
 class DocIn(BaseModel):
@@ -745,6 +749,17 @@ def create_app(
             k: t[k]
             for k in ("id", "name", "description", "doc_name", "pages", "roles", "fields", "sequential", "created_at")
         }
+
+    @app.post("/v1/detect-fields", tags=["templates"])
+    def detect_fields(b: DetectIn, c: Ctx = Depends(need("sender"))):
+        """Fields found in a PDF: its form fields plus fields beside printed labels (Signature, Date, checkboxes).
+        Each has page/x/y/w/h as the template and envelope APIs take them; add `recipient` and send them back."""
+        data = decode_doc(b.document_base64)
+        try:
+            pdfs.inspect(data)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from None
+        return {"fields": detect.detect(data)}
 
     @app.post("/v1/templates", status_code=201, tags=["templates"])
     def create_template(b: TemplateIn, c: Ctx = Depends(need("sender"))):
