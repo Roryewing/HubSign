@@ -30,7 +30,9 @@ module Api
       Template.new(account: current_account, author: current_user, source: :api,
                    name: params[:name].presence || 'Document', external_id: params[:external_id].presence,
                    folder: TemplateFolders.find_or_create_by_name(current_user, params[:folder_name]),
-                   submitters: Array(params[:roles]).map { |name| { 'name' => name.to_s, 'uuid' => SecureRandom.uuid } })
+                   submitters: Array(params[:roles]).map do |name|
+                     { 'name' => name.to_s, 'uuid' => SecureRandom.uuid }
+                   end)
     end
 
     def fill(template, attachments)
