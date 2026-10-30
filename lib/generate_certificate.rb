@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module GenerateCertificate
-  SIZE = 2**11
+  SIZE = 2**12
 
   Pkcs12Struct = Struct.new(:certificate, :ca_certs)
 
