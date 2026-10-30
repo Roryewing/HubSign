@@ -114,7 +114,7 @@ module Accounts
           Account.order(:id).first.encrypted_configs.find_by(key: EncryptedConfig::TIMESTAMP_SERVER_URL_KEY)&.value
       end
 
-      url
+      url || ENV.fetch('TIMESTAMP_SERVER_URL', 'http://timestamp.digicert.com')
     end.presence
   end
 

@@ -1122,6 +1122,39 @@ class Pdfium
       Pdfium.FPDFText_ClosePage(text_page) if text_page && !text_page.null?
     end
 
+    # HubSign addition: every place `query` is printed, even invisibly (white or tiny text). Returns
+    # [{ x:, y:, w:, h: }] in points from the top-left, for the first character of each occurrence. Uses the page's own
+    # drawing order, so a string drawn by one text operation (an anchor tag) is contiguous.
+    def find_text(query)
+      ensure_not_closed!
+
+      return [] if query.to_s.empty? || text.empty?
+
+      text_page = Pdfium.FPDFText_LoadPage(page_ptr)
+      boxes = []
+      left = FFI::MemoryPointer.new(:double)
+      right = FFI::MemoryPointer.new(:double)
+      bottom = FFI::MemoryPointer.new(:double)
+      top = FFI::MemoryPointer.new(:double)
+      from = 0
+
+      while (found = text.index(query, from))
+        # the C API counts UTF-16 units, Ruby counts characters
+        unit = text[0...found].encode('UTF-16LE').bytesize / 2
+
+        if Pdfium.FPDFText_GetCharBox(text_page, unit, left, right, bottom, top).nonzero?
+          boxes << { x: left.read_double, y: height - top.read_double,
+                     w: right.read_double - left.read_double, h: top.read_double - bottom.read_double }
+        end
+
+        from = found + 1
+      end
+
+      boxes
+    ensure
+      Pdfium.FPDFText_ClosePage(text_page) if text_page && !text_page.null?
+    end
+
     def text_nodes
       return @text_nodes if @text_nodes
 

@@ -137,38 +137,6 @@
     </menu-active>
     <% if Docuseal.multitenant? || cannot?(:manage, :tenants) %>
       <div id="support_channels" class="mx-4 border-t border-base-300 <%= 'hidden md:block' unless expanded %>">
-        <% unless turbo_native_app? %>
-          <div class="text-sm mt-3">
-            <%= t('need_help_ask_a_question_') %>
-          </div>
-          <div class="flex mt-3 space-x-3">
-            <div class="tooltip tooltip-no-touch" data-tip="GitHub">
-              <a href="<%= Docuseal::GITHUB_URL %>" target="_blank" class="btn btn-circle btn-primary btn-md">
-                <%= svg_icon('brand_github', class: 'w-8 h-8') %>
-              </a>
-            </div>
-            <div class="tooltip tooltip-no-touch" data-tip="<%= t('discord_community') %>">
-              <a href="<%= Docuseal::DISCORD_URL %>" target="_blank" class="btn btn-circle btn-primary btn-md">
-                <%= svg_icon('brand_discord', class: 'w-8 h-8') %>
-              </a>
-            </div>
-            <%= capture do %>
-              <div class="tooltip tooltip-no-touch" data-tip="<%= t('ai_assistant') %>">
-                <a href="<%= Docuseal::CHATGPT_URL %>" target="_blank" class="btn btn-circle btn-primary btn-md">
-                  <%= svg_icon('message', class: 'w-8 h-8') %>
-                </a>
-              </div>
-            <% end %>
-          </div>
-        <% end %>
-        <a href="mailto:<%= Docuseal::SUPPORT_EMAIL %>" target="_blank" class="w-full block mt-4 underline">
-          <%= Docuseal::SUPPORT_EMAIL %>
-        </a>
-        <% if Docuseal.version.present? && !Docuseal.multitenant? && can?(:manage, EncryptedConfig) %>
-          <a href="https://github.com/docusealco/docuseal/releases" target="_blank" class="badge badge-outline text-xs block mx-auto mt-4">
-            v<%= Docuseal.version %>
-          </a>
-        <% end %>
       </div>
     <% end %>
   </div>
