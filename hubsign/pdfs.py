@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import io
+from functools import lru_cache
 from xml.sax.saxutils import escape
 
 from pdfminer.converter import PDFPageAggregator
@@ -39,25 +40,36 @@ def inspect(data: bytes) -> int:
     return n
 
 
-def find_anchors(pdf: bytes, text: str) -> list[dict]:
-    """Every place `text` is printed, even invisibly (white or tiny text). Positions are in points from the top-left.
+@lru_cache(maxsize=2)
+def _text_pages(pdf: bytes) -> tuple:
+    """Each page as (text, [(x0, y1) per character], width, height). Reading a PDF this way is slow (seconds for a
+    quote with a vector drawing), so one envelope's fields share a single read instead of one read per field.
 
     pdfminer's layout analysis is switched off so characters come back in the order the PDF draws them; a string drawn
     by one text operation, as an anchor tag is, is then contiguous.
     """
-    out: list[dict] = []
+    out = []
     rm = PDFResourceManager()
     dev = PDFPageAggregator(rm, laparams=None)
     it = PDFPageInterpreter(rm, dev)
-    for n, pg in enumerate(PDFPage.get_pages(io.BytesIO(pdf)), start=1):
+    for pg in PDFPage.get_pages(io.BytesIO(pdf)):
         it.process_page(pg)
         page = dev.get_result()
         chars = [o for o in page if isinstance(o, LTChar)]
-        s = "".join(c.get_text() for c in chars)
+        # one position per character of text, so an index into the text is an index into the positions
+        pos = [(c.x0, c.y1) for c in chars for _ in c.get_text()]
+        out.append(("".join(c.get_text() for c in chars), pos, page.width, page.height))
+    return tuple(out)
+
+
+def find_anchors(pdf: bytes, text: str) -> list[dict]:
+    """Every place `text` is printed, even invisibly (white or tiny text). Positions are in points from the top-left."""
+    out: list[dict] = []
+    for n, (s, pos, w, h) in enumerate(_text_pages(pdf), start=1):
         i = s.find(text)
         while i != -1:
-            c = chars[i]
-            out.append({"page": n, "x": c.x0, "top": page.height - c.y1, "page_w": page.width, "page_h": page.height})
+            x0, y1 = pos[i]
+            out.append({"page": n, "x": x0, "top": h - y1, "page_w": w, "page_h": h})
             i = s.find(text, i + 1)
     return out
 
