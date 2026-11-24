@@ -91,6 +91,12 @@ class Database:
         for stmt in SCHEMA.replace("{AUTOID}", auto).replace("{BLOB}", blob).split(";"):
             if stmt.strip():
                 self.x(stmt)
+        # columns added after a database was first created; "already there" is the usual answer
+        for stmt in ("ALTER TABLE envelopes ADD COLUMN attach_pdf INTEGER NOT NULL DEFAULT 0",):
+            try:
+                self.x(stmt)
+            except Exception:
+                pass
 
     def _run(self, sql: str, args: tuple):
         if self.pg:

@@ -11,6 +11,7 @@ from reportlab.pdfgen import canvas
 
 from .conftest import PNG
 from .test_flow import token
+from .test_production import sign_all
 
 
 def anchored_pdf(pages=2, anchors=(), title="Agreement") -> bytes:
@@ -191,7 +192,7 @@ def test_embedded_signer_return_url_reply_to_and_mail(make_env, monkeypatch):
     }  # fmt: skip
     e = env.envelope(**body).json()
     assert [a[1] for a in sent] == ["cust@example.com"]  # the customer only
-    s, to, subject, text, html, reply_to, from_name = sent[0]
+    s, to, subject, text, html, reply_to, from_name, _attachments = sent[0]
     assert (
         subject == "Please sign: Equipment lease"
         and reply_to == {"name": "Dan", "email": "dan@hjv.example"}
@@ -370,3 +371,29 @@ def test_many_anchor_fields_read_the_pdf_once(monkeypatch):
     hits = [pdfs.find_anchors(pdf, f"~cus-{k}~") for k in ["sign", "init"] + [f"spec{n}" for n in range(30)]]
     assert len(reads) == 1
     assert [h["page"] for h in hits[0]] == [2] and [h["page"] for h in hits[1]] == [1] and not any(hits[2:])
+
+
+def test_signing_email_carries_the_pdf_until_someone_signs(make_env, monkeypatch):
+    """attach_pdf: the first signer may print and sign instead; the next signer gets the link only (the original is no
+    longer what is being signed), and an envelope that did not ask gets no attachment."""
+    calls = []
+
+    class R:
+        status_code = 200
+        text = "ok"
+
+    monkeypatch.setattr("hubsign.mail.httpx.post", lambda url, **kw: calls.append(kw["json"]) or R())
+    env = make_env(mail_relay_url="https://relay.example/hubsign-mail", mail_relay_secret="s3cret")
+    e = env.envelope(attach_pdf=True, reply_to={"name": "Randal", "email": "randal@hjv.example"}).json()
+    (first,) = calls
+    assert first["to"] == "ann@example.com" and "OR" in first["text"] and "&mdash; OR &mdash;" in first["html"]
+    assert "email it back to Randal at randal@hjv.example" in first["html"]
+    (att,) = first["attachments"]
+    assert att["filename"].endswith(".pdf") and base64.b64decode(att["content_base64"]).startswith(b"%PDF")
+    sign_all(env, e)
+    bob = next(c for c in calls if c["to"] == "bob@example.com" and c["subject"].startswith("Please sign"))
+    assert "attachments" not in bob and "OR" not in bob["text"]
+
+    calls.clear()
+    env.envelope()
+    assert "attachments" not in calls[0] and "&mdash; OR" not in calls[0]["html"]
