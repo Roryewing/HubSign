@@ -356,3 +356,17 @@ def test_mail_through_a_relay(make_env, monkeypatch):
     assert j["to"] == "ann@example.com" and j["subject"].startswith("Please sign") and "/sign/" in j["html"]
     assert j["reply_to"] == {"name": "Dan", "email": "dan@hjv.example"} and j["from_name"] == "HJV Equipment"
     assert "sendgrid" not in url
+
+
+def test_many_anchor_fields_read_the_pdf_once(monkeypatch):
+    """A quote sends ~40 anchored fields; reading the PDF once per field took minutes and timed the caller out."""
+    from pdfminer.pdfpage import PDFPage
+
+    from hubsign import pdfs
+
+    pdf = anchored_pdf(2, [(2, "~cus-sign~", 100, 200), (1, "~cus-init~", 500, 40)], "Once")
+    reads, real = [], PDFPage.get_pages
+    monkeypatch.setattr(PDFPage, "get_pages", lambda *a, **k: reads.append(1) or real(*a, **k))
+    hits = [pdfs.find_anchors(pdf, f"~cus-{k}~") for k in ["sign", "init"] + [f"spec{n}" for n in range(30)]]
+    assert len(reads) == 1
+    assert [h["page"] for h in hits[0]] == [2] and [h["page"] for h in hits[1]] == [1] and not any(hits[2:])
