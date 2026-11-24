@@ -263,7 +263,7 @@ class Service:
 
     # ---- create / send -------------------------------------------------------------------------------------------
     def create(self, org, user, mode, *, subject, message, documents, recipients, fields, sequential, metadata,
-               allow_reassign=False, reply_to=None, sender_name="") -> str:  # fmt: skip
+               allow_reassign=False, reply_to=None, sender_name="", attach_pdf=False) -> str:  # fmt: skip
         pdf, parts = self._load(documents)
         pages = sum(p["pages"] for p in parts)
         fields = self._place(pdf, parts, fields)
@@ -278,9 +278,10 @@ class Service:
         names = ", ".join(p["name"] for p in parts)
         self.db.x(
             "INSERT INTO envelopes(id,org_id,created_by,mode,subject,message,status,sequential,doc_name,doc_sha256,pages,metadata,"
-            "created_at,updated_at,parts,allow_reassign,reply_to,sender_name) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "created_at,updated_at,parts,allow_reassign,reply_to,sender_name,attach_pdf) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (eid, org, user, mode, subject, message, "draft", int(sequential), names[:200], hashlib.sha256(pdf).hexdigest(), pages,
-             json.dumps(metadata), t, t, json.dumps(parts), int(allow_reassign), json.dumps(reply_to) if reply_to else None, sender_name),
+             json.dumps(metadata), t, t, json.dumps(parts), int(allow_reassign), json.dumps(reply_to) if reply_to else None, sender_name,
+             int(attach_pdf)),
         )  # fmt: skip
         ids = []
         for i, (r, (method, secret, phone)) in enumerate(zip(recipients, auth, strict=True)):
@@ -350,6 +351,7 @@ class Service:
                     e["message"],
                     "Review and sign",
                     f"Please review and sign: {e['subject']}",
+                    paper=True,
                 )
 
     def _finalize(self, eid: str) -> None:
@@ -720,6 +722,7 @@ class Service:
             e["message"],
             "Review and sign",
             f"Please review and sign: {e['subject']}",
+            paper=True,
         )
 
     def form_data(self, eid: str, org: str, mode: str) -> dict[str, str]:
@@ -751,15 +754,43 @@ class Service:
         return data
 
     # ---- mail ----------------------------------------------------------------------------------------------------
-    def _mail(self, r: dict, e: dict, subject: str, body: str, button: str, headline: str) -> None:
+    MAX_ATTACH = 10_000_000
+
+    def _paper(self, e: dict) -> tuple[list[dict], str]:
+        """The PDF to attach to a signing email and the line offering to sign it on paper, or nothing: only for an
+        envelope that asked for it, while nobody has signed (after that the original is no longer what is being signed)."""
+        if not e.get("attach_pdf") or any(x["signed_at"] for x in self.recipients(e["id"])):
+            return [], ""
+        pdf = self.storage.get(f"{e['id']}.pdf")
+        if len(pdf) > self.MAX_ATTACH:
+            return [], ""
+        parts = json.loads(e["parts"])
+        name = parts[0]["name"] if len(parts) == 1 else "Documents.pdf"
+        reply = json.loads(e["reply_to"]) if e.get("reply_to") else None
+        back = (
+            f"{reply.get('name') or reply['email']} at {reply['email']}"
+            if reply and reply.get("email")
+            else "the sender"
+        )
+        return (
+            [{"filename": name if name.lower().endswith(".pdf") else f"{name}.pdf", "content": pdf}],
+            f"Prefer paper? Print the attached PDF, sign it and email it back to {back}.",
+        )
+
+    def _mail(self, r: dict, e: dict, subject: str, body: str, button: str, headline: str, paper: bool = False) -> None:
         if r.get("embedded"):
             return  # they sign inside the sender's own app and are never emailed
+        attachments, alt = self._paper(e) if paper else ([], "")
         link = f"{self.s.base_url.rstrip('/')}/sign/{r['token']}"
         sender = e.get("sender_name") or self.org_name(e["org_id"]) or "Someone"
         reply = json.loads(e["reply_to"]) if e.get("reply_to") else None
-        text = f"Hi {r['name']},\n\n{sender} sent you a document.\n\n{body}\n\n{link}\n\nThe link is personal to you.\n-- HubSign"
+        text = (
+            f"Hi {r['name']},\n\n{sender} sent you a document.\n\n{body}\n\n{link}\n\n"
+            + (f"OR\n\n{alt}\n\n" if alt else "")
+            + "The link is personal to you.\n-- HubSign"
+        )
         html = mail.signing_html(
-            sender=sender, name=r["name"], headline=headline, message=body, link=link, button=button
+            sender=sender, name=r["name"], headline=headline, message=body, link=link, button=button, alt=alt
         )
         mail.send(
             self.s,
@@ -769,5 +800,6 @@ class Service:
             html=html,
             reply_to=reply,
             from_name=sender,
+            attachments=attachments,
             background=not self.s.webhooks_inline,
         )

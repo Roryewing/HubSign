@@ -3,6 +3,7 @@ signing links are also in the API response. Best effort: a failed send is logged
 
 from __future__ import annotations
 
+import base64
 import html as _html
 import logging
 import smtplib
@@ -27,8 +28,11 @@ def configured(s: Settings) -> bool:
 
 
 def _deliver(
-    s: Settings, to: str, subject: str, text: str, html: str | None, reply_to: dict | None, from_name: str | None
-) -> None:
+    s: Settings, to: str, subject: str, text: str, html: str | None, reply_to: dict | None, from_name: str | None,
+    attachments: list[dict] | None = None,
+) -> None:  # fmt: skip
+    """attachments: [{"filename", "content" (PDF bytes)}]"""
+    b64 = [(a["filename"], base64.b64encode(a["content"]).decode()) for a in attachments or []]
     sender = {"email": _from(s), "name": from_name or s.mail_from_name}
     try:
         if s.mail_relay_url:
@@ -42,9 +46,10 @@ def _deliver(
                     "html": html,
                     "reply_to": reply_to,
                     "from_name": from_name or s.mail_from_name,
+                    **({"attachments": [{"filename": n, "content_base64": c} for n, c in b64]} if b64 else {}),
                 },
                 headers={"X-Relay-Secret": s.mail_relay_secret},
-                timeout=20,
+                timeout=60 if b64 else 20,
             )
             if r.status_code >= 300:
                 log.error("mail relay refused mail to %s: %s %s", to, r.status_code, r.text[:200])
@@ -59,6 +64,11 @@ def _deliver(
                     *([{"type": "text/html", "value": html}] if html else []),
                 ],
             }
+            if b64:
+                body["attachments"] = [
+                    {"content": c, "filename": n, "type": "application/pdf", "disposition": "attachment"}
+                    for n, c in b64
+                ]
             if reply_to:
                 body["reply_to"] = {k: v for k, v in reply_to.items() if k in ("email", "name") and v}
             r = httpx.post(
@@ -77,6 +87,8 @@ def _deliver(
         m.set_content(text)
         if html:
             m.add_alternative(html, subtype="html")
+        for a in attachments or []:
+            m.add_attachment(a["content"], maintype="application", subtype="pdf", filename=a["filename"])
         with smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=15) as c:
             c.starttls()
             if s.smtp_user:
@@ -87,17 +99,17 @@ def _deliver(
 
 
 def send(s: Settings, to: str, subject: str, text: str, *, html: str | None = None, reply_to: dict | None = None,
-         from_name: str | None = None, background: bool = True) -> None:  # fmt: skip
+         from_name: str | None = None, attachments: list[dict] | None = None, background: bool = True) -> None:  # fmt: skip
     if not configured(s):
         return
-    args = (s, to, subject, text, html, reply_to, from_name)
+    args = (s, to, subject, text, html, reply_to, from_name, attachments)
     if background:
         threading.Thread(target=_deliver, args=args, daemon=True).start()
     else:
         _deliver(*args)
 
 
-def signing_html(*, sender: str, name: str, headline: str, message: str, link: str, button: str) -> str:
+def signing_html(*, sender: str, name: str, headline: str, message: str, link: str, button: str, alt: str = "") -> str:
     e = _html.escape
     msg = (
         f'<p style="margin:16px 0;padding:12px 14px;background:#f3f1fb;border-radius:8px;white-space:pre-wrap">{e(message)}</p>'
@@ -112,6 +124,12 @@ def signing_html(*, sender: str, name: str, headline: str, message: str, link: s
         f'<h2 style="margin:0 0 8px;font-size:20px">{e(headline)}</h2><p>Hi {e(name)},</p>{msg}'
         f'<p style="margin:22px 0"><a href="{e(link)}" style="background:#ffd23f;color:#2a2000;padding:12px 22px;border-radius:6px;'
         f'text-decoration:none;font-weight:700">{e(button)}</a></p>'
-        f'<p style="font-size:12.5px;color:#645f7d">Or paste this link into your browser:<br>{e(link)}</p>'
-        '<p style="font-size:12px;color:#645f7d">Do not forward this email: the link is personal to you.</p></div></div>'
+        f'<p style="font-size:12.5px;color:#645f7d">If the button does not work, paste this link into your browser:<br>{e(link)}</p>'
+        + (
+            '<p style="margin:20px 0 10px;text-align:center;font-weight:700;color:#645f7d;letter-spacing:2px">&mdash; OR &mdash;</p>'
+            f'<p style="margin:0 0 20px;padding:12px 14px;border:1px solid #e3e1ee;border-radius:8px">{e(alt)}</p>'
+            if alt
+            else ""
+        )
+        + '<p style="font-size:12px;color:#645f7d">Do not forward this email: the link is personal to you.</p></div></div>'
     )

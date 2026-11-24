@@ -153,6 +153,11 @@ class EnvelopeIn(BaseModel):
     send: bool = Field(default=False, description="Send immediately instead of leaving a draft")
     metadata: dict[str, str] = Field(default_factory=dict, description="Your own references, echoed in webhooks")
     allow_reassign: bool = Field(default=False, description="Signers may hand their part to someone else")
+    attach_pdf: bool = Field(
+        default=False,
+        description="Attach the PDF to the signing email with an 'or print, sign and send it back' line. Only while "
+        "nobody has signed yet, and only up to 10 MB",
+    )
     reply_to: ReplyTo | None = None
     sender_name: str = Field(
         default="", max_length=100, description="Shown in the email as who sent it; defaults to the organisation"
@@ -656,6 +661,7 @@ def create_app(
             c.org, c.user["id"], c.mode, subject=b.subject, message=b.message, documents=docs,
             recipients=[r.model_dump() for r in b.recipients], fields=sized(b.fields), sequential=b.sequential, metadata=b.metadata,
             allow_reassign=b.allow_reassign, reply_to=b.reply_to.model_dump() if b.reply_to else None, sender_name=b.sender_name,
+            attach_pdf=b.attach_pdf,
         )  # fmt: skip
         if b.send:
             svc.send(eid, c.org, c.mode)
